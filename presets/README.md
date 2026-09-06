@@ -8,6 +8,31 @@ is the easiest place to manage presets in bulk.
 - **Rename** a preset: rename its file (the filename, minus `.json`, is the
   preset's name).
 
+## Saying more than the name
+
+A preset can also carry a note count and a line of history — where the tuning
+is out of, whose instrument it is after, a link to the source. Add these
+top-level fields by hand to the saved `.json`, beside `"format"` and
+`"data"`:
+
+```json
+{
+  "format": "xenachord-layout",
+  "description": "Vicentino's 1555 archicembalo — see [Wikipedia](https://en.wikipedia.org/wiki/Archicembalo)",
+  "notes": 31,
+  "data": { ... }
+}
+```
+
+- `description` — shown small and dim beside the name in the preset list.
+  `[label](url)` becomes a real link (http/https only).
+- `notes` — the note count, shown bold before the name. Optional for a single
+  keyboard, where it's read off the layout's own period; a rig has to say its
+  own number, since stacked manuals of 19+19+17+17 are a 31-note instrument,
+  not a 72-note one.
+
+Neither field touches the layout — the reader ignores them.
+
 Each downloaded layout file already carries everything: key types, widths,
 scale, and — because "Save Layout File" saves the whole session — the
 tuning/notation and timbre/synth settings that were active when you saved it.

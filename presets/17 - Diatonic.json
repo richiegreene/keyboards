@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "keyboard",
   "name": "xenachord-32key-s16.35",
+  "description": "17-note diatonic keyboard, with sequential split-keys",
   "saved": "2026-09-06 02:33:26",
   "data": {
     "v": 1,

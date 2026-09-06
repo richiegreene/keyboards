@@ -16,8 +16,11 @@
      (v-theme), the left rail/drawer and the bottom viewer bar switch with
      it — everything inside them reads off these vars, so overriding the
      vars in scope is enough to recolor the whole subtree. */
+  /* .preset-list is in the list because the preset dropdown is drawn on
+     <body>, outside #panel, but belongs to the drawer and has to switch
+     with it — see the preset picker rules below. */
   body.bright #panel, body.bright #viewbar2, body.bright #strip, body.bright #stripHandle,
-  body.bright .navgizmo-wrap{
+  body.bright .navgizmo-wrap, body.bright .preset-list{
     --bg:#e9e9ec; --panel:#f2f2f4; --panel2:#e4e5e9; --panel-bright:#d8d9de;
     --line:#c9cad0; --text:#1b1c20; --dim:#5c5d66; --accent:#1f6feb;
     --strip-bg:#dcdde2; --palette-bg:#d8d9de; --scope-bg:#dcdde2;
@@ -119,6 +122,38 @@
   .fixed-note{color:var(--dim);font-size:10.5px;margin:8px 0 0;padding:5px 7px;
     border-left:2px solid var(--accent);background:rgba(111,183,255,.07);border-radius:0 4px 4px 0}
   .fixed-note b{color:var(--text)}
+
+  /* ---------- preset picker ----------
+     A custom dropdown, not a native <select>: a preset carries a note count
+     and a line of history (see build-presets.js), and those want to be drawn
+     bold and small-and-dim beside the name, with a link in the history that
+     can be followed. A native <option> holds plain text only — browsers
+     never interpret markup inside one — so the list is drawn by hand. */
+  .preset-btn{width:100%;text-align:left;display:flex;align-items:baseline;gap:6px;
+    background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:6px;padding:5px 7px;font-size:12.5px;cursor:pointer}
+  .preset-btn .ph{color:var(--dim)}
+  /* the open list is appended to <body> and positioned fixed, not nested in
+     the fieldset — a <fieldset> clips absolutely-positioned overflowing
+     descendants in Chromium whatever its own overflow says, so an in-place
+     dropdown gets cut off at the fieldset's edge */
+  /* color, not just the vars: text colour inherits from <body>, which is on
+     the dark palette even in bright mode */
+  .preset-list{position:fixed;z-index:20;color:var(--text);
+    max-height:260px;overflow-y:auto;background:var(--panel2);
+    border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .preset-list .opt{padding:5px 7px;font-size:12.5px;cursor:pointer}
+  .preset-list .opt:hover,.preset-list .opt.hi{background:var(--accent);color:#fff}
+  .preset-list .opt:hover .desc,.preset-list .opt.hi .desc{color:inherit;opacity:.8}
+  /* the history sits under the name, on as many lines as it needs — it is
+     prose, not a label, and clipping it to one line loses the point of it */
+  .preset-list .opt .desc{display:block;color:var(--dim);font-size:10.5px;
+    line-height:1.35;margin-top:1px}
+  /* a link reads as one — blue against the dim prose around it. On the row
+     under the cursor, which is itself painted accent blue, it goes back to
+     inheriting or it would disappear into its own background. */
+  .preset-list .opt .desc a{color:var(--accent);text-decoration:underline}
+  .preset-list .opt:hover .desc a,.preset-list .opt.hi .desc a{color:inherit}
 
   /* ---------- key type palette ----------
      A horizontal row of four icon-only chips. The visible label/blurb text
@@ -685,8 +720,10 @@
     <fieldset>
       <legend>Presets</legend>
       <div class="row">
-        <div><select id="preset"
-          title="All presets, from the presets/ folder (see presets-shared.js). Add or remove one by editing that folder and running build-presets.js — not from inside the app."></select></div>
+        <div
+          title="Theoretical and preexisting historical keyboards">
+          <button type="button" class="preset-btn" id="preset-btn"><span class="ph">Choose a preset…</span></button>
+        </div>
       </div>
       <button class="primary wide" id="clear-all" style="width:100%;margin-top:9px"
         title="32 identical white keys, narrowed so that all 32 fit inside spine half A + half B">
@@ -1544,15 +1581,98 @@ function allPresets(){
 }
 const presetNames = () => Object.keys(allPresets()).sort((a,b)=>a.localeCompare(b));
 
-const presetSel = $('preset');
-function buildPresetOptions(){
-  const names = presetNames();
-  const esc = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  presetSel.innerHTML =
-    '<option value="" disabled hidden></option>' +
-    (names.length ? '<optgroup label="Presets">' + names.map(n =>
-      `<option value="${CUSTOM_PREFIX}${esc(n)}">${esc(n)}</option>`).join('') + '</optgroup>' : '');
+/* A PRESET SAYS MORE THAN ITS NAME.  Beside the name that its filename gives
+ * it, a preset may carry a note count and a sentence of history — where the
+ * tuning is out of, whose instrument it is after, a link to the source. Those
+ * come from top-level "notes" / "description" fields hand-added to the saved
+ * .json (see build-presets.js), and reach the app in XENACHORD_PRESET_INFO,
+ * an object separate from the layouts themselves.
+ *
+ * A custom dropdown stands in for a native <select> to show them: the count
+ * bold, the description small and dim, [label](url) as a real link — none of
+ * which plain text inside a native <option> can be. presetSel below exposes
+ * just the slice of <select> API the rest of the app already calls. */
+const presetBtn = $('preset-btn');
+let presetOptions = [];   // [{value, name, notes, desc}], in menu order
+let presetList = null;    // the open dropdown's list element, or null
+const presetSel = {
+  _value: '',
+  get value(){ return this._value; },
+  set value(v){
+    this._value = v || '';
+    const opt = presetOptions.find(o => o.value === this._value);
+    presetBtn.innerHTML = opt ? presetRowHTML(opt, false)
+      : '<span class="ph">Choose a preset…</span>';
+  },
+  onchange: null
+};
+function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+/* [label](url) becomes a link; everything else stays text. Only http(s) is
+ * let through — a description is hand-written into a preset file, but a
+ * preset file is also something you can be sent, and javascript: in a link
+ * the app renders is a hole nobody needs. */
+function descHTML(text){
+  return esc(text).replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (whole, label, href) =>
+    /^https?:\/\//i.test(href)
+      ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : whole);
 }
+function presetRowHTML(opt, withDesc){
+  return (opt.notes != null ? `<b>${esc(opt.notes)}</b> ` : '')
+    + esc(opt.name)
+    + (withDesc && opt.desc ? ` <span class="desc">${descHTML(opt.desc)}</span>` : '');
+}
+function closePresetMenu(){
+  if (presetList){ presetList.remove(); presetList = null; }
+}
+function buildPresetOptions(){
+  const info = (window.XENACHORD_PRESET_INFO && typeof window.XENACHORD_PRESET_INFO === 'object')
+    ? window.XENACHORD_PRESET_INFO : {};
+  presetOptions = presetNames().map(n => {
+    const notes = info[n] && info[n].n != null ? info[n].n : null;
+    /* "31 - Archicembalo" reads as "31 Archicembalo" once the count is drawn
+     * in its own right, so the filename's leading count is dropped from the
+     * name rather than said twice */
+    const name = notes != null
+      ? n.replace(new RegExp('^' + notes + '\\s*[-–—]\\s*'), '') : n;
+    return {
+      value: CUSTOM_PREFIX + n,
+      name,
+      notes,
+      desc: (info[n] && info[n].d) || ''
+    };
+  });
+  presetSel.value = presetSel._value;   // refresh button label against the new list
+}
+presetBtn.onclick = () => {
+  if (presetList){ closePresetMenu(); return; }
+  presetList = document.createElement('div');
+  presetList.className = 'preset-list';
+  const r = presetBtn.getBoundingClientRect();
+  presetList.style.left = r.left + 'px';
+  presetList.style.width = r.width + 'px';
+  presetList.style.top = (r.bottom + 2) + 'px';
+  for (const opt of presetOptions){
+    const row = document.createElement('div');
+    row.className = 'opt';
+    if (opt.value === presetSel._value) row.classList.add('hi');
+    row.innerHTML = presetRowHTML(opt, true);
+    row.onclick = e => {
+      /* following a link in a description is not choosing the preset */
+      if (e.target.closest('a')) return;
+      closePresetMenu();
+      presetSel.value = opt.value;
+      if (presetSel.onchange) presetSel.onchange();
+    };
+    presetList.appendChild(row);
+  }
+  document.body.appendChild(presetList);
+};
+document.addEventListener('click', e => {
+  if (presetList && e.target !== presetBtn && !presetBtn.contains(e.target) && !presetList.contains(e.target))
+    closePresetMenu();
+});
 
 buildPresetOptions();
 
@@ -1577,9 +1697,12 @@ presetSel.onchange = () => {
       if (r){
         rig = r; selectUnit(rig.sel);
         forgetPressBlend();
+        /* before syncInputs, which reads design.preset back out to name the
+         * preset in the picker — named afterwards, the rig would load with
+         * the picker showing nothing chosen */
+        design.preset = presetSel.value;
         syncInputs(); rebuild();
         if (saved.x) XShare.applyPlay(saved.x);
-        design.preset = presetSel.value;
       }
       return;
     }

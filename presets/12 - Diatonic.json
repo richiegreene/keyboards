@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "keyboard",
   "name": "xenachord-32key-s11.79",
+  "description": "Standard [Halberstadt keyboard](https://en.xen.wiki/w/Halberstadt_keyboard) with 12 notes per octave, beginning on C",
   "saved": "2026-09-06 02:36:22",
   "data": {
     "v": 1,

@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "keyboard",
   "name": "xenachord-32key-s11.79",
+  "description": "[Maqam Hijaz](https://en.wikipedia.org/wiki/Phrygian_dominant_scale) (aka Phyrigian dominant scale) with 12 notes per octave",
   "saved": "2026-09-06 03:15:38",
   "data": {
     "v": 1,

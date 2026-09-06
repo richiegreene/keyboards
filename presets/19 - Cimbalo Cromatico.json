@@ -1,0 +1,127 @@
+{
+  "format": "xenachord-layout",
+  "version": 1,
+  "kind": "keyboard",
+  "name": "xenachord-32key-s18.80",
+  "description": "Gioseffo Zarlino's 1558 [Le Istitutioni Harmoniche](https://archive.org/details/imslp-istitutioni-harmoniche-zarlino-gioseffo/page/n179/mode/2up) proposal",
+  "saved": "2026-09-06 05:12:22",
+  "data": {
+    "v": 1,
+    "sl": {
+      "0": [
+        6,
+        4
+      ],
+      "1": [
+        1
+      ],
+      "2": [
+        3,
+        5
+      ],
+      "3": [
+        6,
+        4
+      ],
+      "4": [
+        1
+      ],
+      "5": [
+        3,
+        5
+      ],
+      "6": [
+        3,
+        5
+      ],
+      "7": [
+        6,
+        4
+      ],
+      "8": [
+        1
+      ],
+      "9": [
+        3,
+        5
+      ],
+      "10": [
+        6,
+        4
+      ],
+      "11": [
+        1
+      ]
+    },
+    "p": 19,
+    "k": {
+      "a0": 1.1308,
+      "a1": 0.9141,
+      "a2": 1.1656,
+      "a3": 1.2691,
+      "a4": 0.9451,
+      "a5": 1.375,
+      "a6": 1.1766,
+      "a7": 1.2132,
+      "a8": 0.9462,
+      "a9": 1.375,
+      "a10": 1.1487,
+      "a11": 1.125,
+      "w0": 0.971,
+      "w1": 0.9763,
+      "w2": 0.9859,
+      "w3": 1.0239,
+      "w4": 0.9831,
+      "w5": 0.9832,
+      "w6": 1.0284,
+      "w7": 1.0283,
+      "w8": 0.983,
+      "w9": 0.9825,
+      "w10": 1.0236,
+      "w11": 1.0307
+    },
+    "pt": 0.25,
+    "b": 2,
+    "x": {
+      "t": {
+        "nominal": 1,
+        "acc": 1,
+        "oct": 4,
+        "hz": 261.6256,
+        "system": "custom",
+        "edoRead": "updown",
+        "edoHalves": "exclude",
+        "jiRead": "heji",
+        "sagPrecision": "medium",
+        "sagFlavour": "revo",
+        "rot": 14,
+        "scale": "1/1 9/8 5/4 4/3 3/2 5/3 15/8",
+        "custom": {},
+        "trStep": null,
+        "trStepByDevice": {
+          "0": 19,
+          "2": 17
+        },
+        "midiRot": 0,
+        "midiRotByDevice": {
+          "0": 12,
+          "2": 11
+        },
+        "equaveShift": 0
+      },
+      "s": {
+        "timbre": 1133,
+        "adsr": {
+          "a": 0.36,
+          "d": 0.2902,
+          "s": 0.7594,
+          "r": 0.9433
+        }
+      },
+      "m": {
+        "origin": 60,
+        "velocity": true
+      }
+    }
+  }
+}

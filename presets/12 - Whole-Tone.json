@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "keyboard",
   "name": "xenachord-32key-s13.92",
+  "description": "[Whole-tone scale](https://en.wikipedia.org/wiki/Whole-tone_scale) with 12 notes per octave",
   "saved": "2026-09-06 02:52:41",
   "data": {
     "v": 1,

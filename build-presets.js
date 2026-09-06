@@ -28,21 +28,58 @@ const OUT = path.join(__dirname, 'presets-shared.js');
 globalThis.XM = require('./model.js');
 const XShare = require('./share.js');
 
+/* WHAT A PRESET SAYS ABOUT ITSELF, BESIDE ITS LAYOUT.
+ *
+ * The filename is the preset's name and nothing else. Anything longer — where
+ * a tuning came from, who it is after, a link to the paper it is out of —
+ * goes in the saved .json itself, as top-level fields added by hand after the
+ * file is dropped into presets/:
+ *
+ *   "description": "Vicentino's 1555 archicembalo, see [Wikipedia](https://…)"
+ *   "notes": 31          // optional; only needed when it can't be derived
+ *
+ * These sit beside "format"/"kind"/"data" and are ignored by the layout
+ * reader, so adding them can't disturb the keyboard the file describes. The
+ * app renders the note count bold and the description small and dim, with
+ * [label](url) turned into a real link. */
+function infoFromFile(text, value, kind, name) {
+  let raw = null;
+  try { raw = JSON.parse(text); } catch (e) { return null; }
+  if (!raw || typeof raw !== 'object') return null;
+  const info = {};
+  if (typeof raw.description === 'string' && raw.description.trim()) {
+    info.d = raw.description.trim();
+  }
+  /* A single keyboard's note count is its period — what the app itself calls
+   * "Notes in Scale". A rig's is not derivable: four stacked manuals of
+   * 19+19+17+17 are an instrument of 31 notes, not 72. But this folder has
+   * always led its filenames with the count ("31 - Archicembalo"), so that
+   * prefix answers for a rig, and a "notes" field in the file overrules
+   * both. */
+  const lead = /^(\d+)\s*[-–—]\s*/.exec(name);
+  const notes = Number.isFinite(raw.notes) ? raw.notes
+    : (kind === 'design' && Number.isFinite(value.period)) ? value.period
+    : lead ? +lead[1] : null;
+  if (notes != null) info.n = notes;
+  return Object.keys(info).length ? info : null;
+}
+
 function presetFromFile(text, fallbackName) {
   const got = XShare.fromFile(text);
   if (!got || !got.value) return null;
   const x = got.play && Object.keys(got.play).length ? got.play : null;
+  const info = infoFromFile(text, got.value, got.kind, fallbackName);
   if (got.kind === 'rig') {
     const entry = { rig: got.value };
     if (x) entry.x = x;
-    return entry;
+    return { entry, info };
   }
   const entry = Object.assign(
     { template: [null, null, null, null, null, null, null] },
     got.value
   );
   if (x) entry.x = x;
-  return entry;
+  return { entry, info };
 }
 
 function main() {
@@ -50,15 +87,17 @@ function main() {
   const files = fs.readdirSync(DIR).filter(f => f.toLowerCase().endsWith('.json'));
 
   const presets = {};
+  const info = {};
   for (const file of files) {
     const full = path.join(DIR, file);
     const name = path.basename(file, path.extname(file));
     let text;
     try { text = fs.readFileSync(full, 'utf8'); }
     catch (e) { console.warn(`skipped ${file}: could not read (${e.message})`); continue; }
-    const entry = presetFromFile(text, name);
-    if (!entry) { console.warn(`skipped ${file}: not a Xenachord layout file`); continue; }
-    presets[name] = entry;
+    const got = presetFromFile(text, name);
+    if (!got) { console.warn(`skipped ${file}: not a Xenachord layout file`); continue; }
+    presets[name] = got.entry;
+    if (got.info) info[name] = got.info;
   }
 
   const names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
@@ -80,6 +119,12 @@ function main() {
  * file already carries its tuning/notation and timbre/synth session, saved
  * exactly as Xenachord Designer wrote it.
  *
+ * A preset may also say something about itself, by hand-adding top-level
+ * fields to its .json: "description" (shown small and dim beside the name,
+ * with [label](url) rendered as a link) and "notes" (the note count, shown
+ * bold — derived from the layout when the file doesn't say). These are
+ * collected into XENACHORD_PRESET_INFO below, separate from the layouts.
+ *
  * (This file can still be produced by the app's own "Write Presets File"
  * button, which overlays browser-side saves/deletions the same way. The two
  * paths write the same format and neither depends on the other.)
@@ -88,7 +133,13 @@ function main() {
   const body = names
     .map(n => '  ' + JSON.stringify(n) + ': ' + JSON.stringify(presets[n]) + ',')
     .join('\n');
-  const out = head + 'window.XENACHORD_PRESETS = {\n' + (body ? body + '\n' : '') + '};\n';
+  /* what each preset says about itself — n: note count, d: description — kept
+     in its own object so nothing here can reach the design objects above */
+  const infoBody = names.filter(n => info[n])
+    .map(n => '  ' + JSON.stringify(n) + ': ' + JSON.stringify(info[n]) + ',')
+    .join('\n');
+  const out = head + 'window.XENACHORD_PRESETS = {\n' + (body ? body + '\n' : '') + '};\n'
+    + '\nwindow.XENACHORD_PRESET_INFO = {\n' + (infoBody ? infoBody + '\n' : '') + '};\n';
 
   fs.writeFileSync(OUT, out);
   console.log(`presets-shared.js written — ${names.length} preset${names.length === 1 ? '' : 's'} from presets/`);
