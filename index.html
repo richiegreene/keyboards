@@ -691,13 +691,8 @@
       <legend>Presets</legend>
       <div class="row">
         <div><select id="preset"
-          title="All presets, shared via presets-shared.js. A dot marks one saved locally that isn't in that file yet."></select></div>
-        <button id="preset-del" style="padding:4px 8px"
-          title="Delete the selected preset. Write the presets file afterward to remove it for every user.">⌫</button>
+          title="All presets, from the presets/ folder (see presets-shared.js). Add or remove one by editing that folder and running build-presets.js — not from inside the app."></select></div>
       </div>
-      <p class="hint" id="preset-pending" style="display:none"></p>
-      <button class="wide" id="preset-write" style="width:100%;margin-top:7px;display:none"
-        title="Writes presets-shared.js from the current preset list, so local saves/deletions apply for every user. Saves in place if the browser allows it, otherwise downloads for you to put beside index.html.">⬇︎ Write Presets File</button>
       <button class="primary wide" id="clear-all" style="width:100%;margin-top:9px"
         title="32 identical white keys, narrowed so that all 32 fit inside spine half A + half B">
         ↺︎ Clear All (32 White Keys)</button>
@@ -1170,8 +1165,6 @@
             <div class="btns">
               <button class="primary wide" id="copy-py"
                 title="A runnable Blender script that rebuilds the design from the Key Type Categories collection.">⧉ Copy Python Log</button>
-              <button class="wide" id="save-preset"
-                title="Save the current layout, widths, scale, bevel, tuning, sound and MIDI mapping as a named preset in Design's Presets menu">⬇︎ Save to Presets</button>
               <button class="wide" id="dl-py">⬇︎ Save design log (.py)</button>
               <button id="dl-svg"
                 title="Save the layout currently displayed in Play, including its selected tuning and notation">⬇︎ Save design (.svg)</button>
@@ -1524,170 +1517,50 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'
 /* ===================== controls ===================== */
 /* ===================== PRESETS =====================
  *
- * A PRESET BELONGS TO THE APP, NOT TO A BROWSER.  presets-shared.js beside
- * index.html is the list; every copy of the app carries it, so a preset saved
- * there is one anybody who opens the app can load, and one anybody can throw
- * away for good.  localStorage cannot do that job at all — what is saved in
- * it has never left the machine it was typed on.
+ * A PRESET BELONGS TO THE APP, NOT TO A BROWSER, AND NOW ENTIRELY TO THE
+ * presets/ FOLDER.  presets-shared.js beside index.html is the list; every
+ * copy of the app carries it, so a preset in it is one anybody who opens the
+ * app sees, and one that is not in it is one nobody has.  There is no
+ * in-browser save or delete any more, and no localStorage overlay sitting on
+ * top of the shipped list — the list IS window.XENACHORD_PRESETS, read
+ * straight, so deleting a preset's file from presets/ and rebuilding
+ * (`node build-presets.js`) removes it for good, everywhere, on next load.
  *
- * BUT A BROWSER CANNOT WRITE TO A FILE ON ITS OWN.  So saving and deleting
- * take effect at once and are held as an OVERLAY on top of the shipped list —
- * names added, names struck out — and "Write Presets File" is what turns that
- * overlay into the file itself.  Until it is written the panel says so, in as
- * many words, because a change that looks saved and is not is worse than one
- * that plainly is not.
- *
- * THE OVERLAY HEALS ITSELF.  Once the written file is in place beside
- * index.html, an addition is already in the shipped list and a deletion has
- * nothing left to strike out, so both drop out of the overlay on the next
- * load and the panel goes quiet.  Nothing has to be cleared by hand, and
- * nothing is cleared on the strength of a download that may never have been
- * moved into the folder.
+ * To add or change presets: drop a "Save Layout File (.json)" into presets/,
+ * delete a file to remove that preset, rename a file to rename it, then run
+ * `node build-presets.js` from the xenachord-designer folder. See
+ * presets/README.md.
  */
-const CUSTOM_LS = 'xenachord-designer-v2-presets';        // pre-file, migrated
-const EDITS_LS  = 'xenachord-designer-v2-preset-edits';
 const CUSTOM_PREFIX = 'custom:';   // kept: saved designs name their preset so
 
-/** The presets the app itself carries. Absent file, absent list — not fatal. */
-function shippedPresets(){
+/* a browser that saved or deleted presets locally before this change has no
+ * further use for that history — the folder is the only source of truth now,
+ * so any leftover overlay is purged rather than quietly resurrecting a
+ * preset that was deleted from the app on purpose */
+try {
+  localStorage.removeItem('xenachord-designer-v2-presets');
+  localStorage.removeItem('xenachord-designer-v2-preset-edits');
+} catch(err){}
+
+/** Every preset the app has — exactly what presets-shared.js says. */
+function allPresets(){
   const p = window.XENACHORD_PRESETS;
   return (p && typeof p === 'object') ? p : {};
 }
-
-/** What has been saved or deleted here and is not in the file yet. */
-function loadEdits(){
-  let e = null;
-  try { e = JSON.parse(localStorage.getItem(EDITS_LS)); } catch(err){}
-  if (!e || typeof e !== 'object') e = null;
-  const add = (e && e.add && typeof e.add === 'object') ? e.add : {};
-  const del = (e && Array.isArray(e.del)) ? e.del : [];
-  const out = { add, del: del.filter(n => typeof n === 'string') };
-
-  /* presets from before there was a file: they were saved in good faith and
-   * are not going to be dropped, so they arrive as pending additions and the
-   * panel invites them into the file like any other */
-  if (!e) try {
-    const old = JSON.parse(localStorage.getItem(CUSTOM_LS)) || {};
-    for (const [k,v] of Object.entries(old)) if (!out.add[k]) out.add[k] = v;
-  } catch(err){}
-
-  /* the self-heal: anything the file now says is no longer an edit to it */
-  const ship = shippedPresets();
-  for (const k of Object.keys(out.add))
-    if (k in ship && JSON.stringify(ship[k]) === JSON.stringify(out.add[k])) delete out.add[k];
-  out.del = out.del.filter(k => k in ship);
-  return out;
-}
-function saveEdits(e){ try{ localStorage.setItem(EDITS_LS, JSON.stringify(e)); }catch(err){} }
-
-/** Every preset the app has, shipped and pending together. One list. */
-function allPresets(){
-  const e = loadEdits(), out = {};
-  for (const [k,v] of Object.entries(shippedPresets())) if (!e.del.includes(k)) out[k] = v;
-  for (const [k,v] of Object.entries(e.add)) out[k] = v;
-  return out;
-}
 const presetNames = () => Object.keys(allPresets()).sort((a,b)=>a.localeCompare(b));
-function pendingEdits(){
-  const e = loadEdits();
-  return { adds: Object.keys(e.add).length, dels: e.del.length,
-           n: Object.keys(e.add).length + e.del.length };
-}
 
 const presetSel = $('preset');
 function buildPresetOptions(){
-  const names = presetNames(), e = loadEdits();
+  const names = presetNames();
   const esc = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   presetSel.innerHTML =
     '<option value="" disabled hidden></option>' +
     (names.length ? '<optgroup label="Presets">' + names.map(n =>
-      `<option value="${CUSTOM_PREFIX}${esc(n)}">${esc(n)}` +
-      /* a preset the file has not been told about yet is marked, so the list
-       * itself says which of these another user would already have */
-      `${(n in e.add) ? ' ·' : ''}</option>`).join('') + '</optgroup>' : '');
-  showPresetState();
-}
-
-/** What is not in the file yet, said plainly. */
-function showPresetState(){
-  const { adds, dels, n } = pendingEdits();
-  const line = $('preset-pending'), btn = $('preset-write');
-  btn.style.display = n ? '' : 'none';
-  line.style.display = n ? '' : 'none';
-  if (!n) return;
-  const bits = [];
-  if (adds) bits.push(`${adds} saved`);
-  if (dels) bits.push(`${dels} deleted`);
-  line.innerHTML =
-    `<b>${bits.join(' · ')}</b> in this browser only. Write the file and put it ` +
-    `beside index.html to give every user the same list.`;
+      `<option value="${CUSTOM_PREFIX}${esc(n)}">${esc(n)}</option>`).join('') + '</optgroup>' : '');
 }
 
 buildPresetOptions();
 
-/* ---- turning the overlay into the app ----
- * Chrome can be handed the real file and write straight into it, which is the
- * whole point: the preset ends up in the app rather than in a downloads
- * folder. Where that is not available the file is downloaded instead and has
- * to be moved next to index.html by hand — so the overlay is NOT cleared
- * either way. It clears itself when the file it describes is actually there.
- */
-let presetFileHandle = null;
-
-function presetsFileText(){
-  const all = allPresets(), names = presetNames();
-  const head = `/* =====================================================================
- *  SHARED PRESETS — the layouts this app itself carries
- * =====================================================================
- *
- * GENERATED by the Xenachord Designer's "Write Presets File" button.
- * ${new Date().toISOString().replace('T',' ').slice(0,19)} · ${names.length} preset${names.length===1?'':'s'}
- *
- * This file IS the preset list. It lives beside index.html, so every copy of
- * the app carries it and anybody who opens the app sees the same presets. A
- * preset is one KEYBOARD and, where it was saved with one, the session that
- * goes with it — key types, widths, scale length, rotation, tuning, sound and
- * MIDI mapping — not a rig: where a device stands and what its keys are
- * called belong to the desk, so a preset loads into any device of any rig
- * without renumbering it.
- *
- * Written as a script rather than as .json because the app is meant to run by
- * opening index.html, and a file:// page cannot fetch() data.
- */
-`;
-  const body = names.map(n =>
-    '  ' + JSON.stringify(n) + ': ' + JSON.stringify(all[n]) + ',').join('\n');
-  return head + 'window.XENACHORD_PRESETS = {\n' + (body ? body + '\n' : '') + '};\n';
-}
-
-async function writePresetsFile(){
-  const text = presetsFileText();
-  if (window.showSaveFilePicker){
-    try {
-      if (!presetFileHandle) presetFileHandle = await window.showSaveFilePicker({
-        suggestedName: 'presets-shared.js',
-        types: [{ description: 'Xenachord presets', accept: {'text/javascript': ['.js']} }],
-      });
-      const w = await presetFileHandle.createWritable();
-      await w.write(text); await w.close();
-      /* Written into the app itself. The list in memory is now what the file
-       * says, so the overlay has nothing left to describe and empties on the
-       * spot rather than waiting for a reload. */
-      window.XENACHORD_PRESETS = allPresets();
-      saveEdits({ add:{}, del:[] });
-      buildPresetOptions();
-      toast(`presets written — ${presetNames().length} in the app`);
-      return;
-    } catch(err){
-      presetFileHandle = null;
-      if (err && err.name === 'AbortError') return;      // picker dismissed
-      /* fall through to the download */
-    }
-  }
-  download('presets-shared.js', new TextEncoder().encode(text), 'text/javascript');
-  toast('presets-shared.js saved — put it beside index.html');
-}
-$('preset-write').onclick = writePresetsFile;
 presetSel.onchange = () => {
   if (!presetSel.value) return;
   const wasBevel = bevelNow();      // what the edge is broken at right now
@@ -1745,70 +1618,6 @@ presetSel.onchange = () => {
    * takeShared() applies them last: Auto reads its division off the
    * layout that is on the desk when it runs */
   if (play) XShare.applyPlay(play);
-};
-/* ---- deleting one ----
- * Any preset, by anybody, for good.  There is no protected set: a preset the
- * app shipped with is struck out of the list here and out of the file at the
- * next write, and after that no user has it.  That is what makes the list the
- * app's rather than an author's, and it is why deleting one the app already
- * carries asks first — it is not this browser's copy that goes. */
-$('preset-del').onclick = () => {
-  const v = presetSel.value;
-  if (!v || !v.startsWith(CUSTOM_PREFIX)){ toast('choose a preset to delete'); return; }
-  const name = v.slice(CUSTOM_PREFIX.length);
-  const e = loadEdits(), shipped = name in shippedPresets();
-  if (!(name in allPresets())) return;
-  if (shipped && !confirm(
-      `Delete "${name}" from the app?\n\nIt is one of the presets this app ` +
-      `carries, so writing the presets file after this takes it away from ` +
-      `every user, not just from this browser.`)) return;
-  delete e.add[name];                       // never reached the file: simply gone
-  if (shipped && !e.del.includes(name)) e.del.push(name);
-  saveEdits(e);
-  buildPresetOptions();
-  design.preset = null;
-  syncInputs();
-  toast(shipped ? `deleted "${name}" — write the file to make it stick`
-                : `deleted "${name}"`);
-};
-$('save-preset').onclick = () => {
-  const name = (prompt('Save current design as preset:', ''))?.trim();
-  if (!name) return;
-  const all = allPresets();
-  if (all[name] && !confirm(`Overwrite existing preset "${name}"?`)) return;
-  /* the scale length is part of the design, not of the session: a preset
-   * that forgot it would come back as 32 loose keys that merely happen to
-   * look periodic, and the next edit inside the period would not repeat */
-  /* A preset is a keyboard, not a rig.  The numbering is this device's
-   * relationship to the others and belongs to the desk it is standing on, so
-   * it stays behind — loading a saved layout into the upper manual must not
-   * quietly renumber it as though it were the lower one. */
-  /* AND SO IS THE BREAK ON THE PLAYING EDGE.  It is set on the design
-   * rather than beside it, so a square keyboard carries no `bevel` at all
-   * and a preset written from it would be indistinguishable from one saved
-   * before presets carried the edge — which is read as "keep what is on
-   * screen".  Writing the amount down every time, 0 included, makes the
-   * preset state its own edge instead of inheriting somebody else's. */
-  const keep = Object.assign(JSON.parse(JSON.stringify(design)),
-                             { period: periodNow(), bevel: bevelNow() });
-  delete keep.noteBase; delete keep.noteStep;
-  /* A PRESET IS A SESSION, NOT JUST A KEYBOARD.  Loading one that left the
-   * tuning, the synth and the MIDI mapping behind would hand back the same
-   * picture-of-an-instrument problem a bare layout link has — see share.js.
-   * XShare.playNow() is exactly what a share link already carries, so a
-   * preset carries it too, under the same `x` key a payload uses. */
-  const play = XShare.playNow();
-  if (play) keep.x = play;
-  const e = loadEdits();
-  e.add[name] = keep;
-  /* saving over a preset the app carries is a replacement, not a second one
-   * standing beside it — the strike-out goes with the addition */
-  e.del = e.del.filter(n => n !== name);
-  saveEdits(e);
-  buildPresetOptions();
-  design.preset = CUSTOM_PREFIX + name;
-  syncInputs();
-  toast(`saved "${name}" — write the presets file to give it to every user`);
 };
 /* CLEAR ALL — the cleared keyboard is not "empty", it is the 32-white one:
  * every key identical, narrowed until all 32 stand inside the spine. */
