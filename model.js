@@ -1127,7 +1127,7 @@
    *  hangs off; everything the key does structurally, it does through it. *
    *                                                                      *
    *  So the ceiling comes down ROOF_DROP, and the wall between the roof   *
-   *  and the playing face goes from WALL to WALL + ROOF_DROP — 1.8077 mm  *
+   *  and the playing face goes from WALL to WALL + ROOF_DROP — 1.4077 mm  *
    *  — which is what carries the key's bending, what the finger presses   *
    *  on, and what the tongue sets out from at the back.  It is also why   *
    *  the back corner needs no ramp any more: the first millimetre and a   *
@@ -1139,7 +1139,7 @@
    *  the ceiling itself and the tops of the inner walls that carry it —   *
    *  so the cavity keeps its shape exactly and only gets shallower.       *
    * ==================================================================== */
-  const ROOF_DROP = 0.807703;          // how far the shell's ceiling comes down
+  const ROOF_DROP = 0.407703;          // how far the shell's ceiling comes down
 
   const ROOF_SRC = new WeakMap();
   /** the white with the ceiling of its shell dropped ROOF_DROP */
