@@ -603,7 +603,6 @@ function label() {
     span.innerHTML = nameHtml(p);
     el.appendChild(span);
     el.dataset.deg = p.deg;
-    if (p.typed) el.classList.add('tuned');
     /* The title the key already carries says what it IS; this says what it
      * sounds. Appended rather than replaced so neither answer is lost. */
     el.title = (el.title ? el.title + '  ·  ' : '') +
