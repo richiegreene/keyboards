@@ -53,6 +53,30 @@
   .rail-btn[aria-expanded="true"]{color:var(--text);background:transparent;
     box-shadow:inset 0 0 0 1px var(--accent)}
   .rail-icon{width:24px;height:24px}
+  /* ---- the night/day toggle ----
+     It used to be a 22px circle holding a ⏾ or a ● character, tucked at the
+     right-hand end of the options bar under the viewport — beside the label
+     sizer and the comb separator, which are settings of the DRAWING. This is
+     not one of those: it is a property of the whole window, so it now sits at
+     the foot of the rail where the app's own switches belong, drawn as a rail
+     button like every other. `margin-top:auto` is what puts it at the foot —
+     the three drawer buttons stay packed at the top.
+
+     Both glyphs are in the markup and one is shown at a time, rather than one
+     being swapped by script: no icon flashes in on first paint, and the rule
+     that decides which is showing lives beside the rule that draws them. They
+     key off `body.bright`, which is already the app's word for this state, so
+     there is one source of truth rather than two that can drift.
+
+     The icon shows the STATE, not the action — a crescent while the viewport
+     is dark, a sun while it is light. That is the reading every phone uses,
+     and the opposite convention (show what you will GET) is only legible if
+     you already know which convention you are looking at. */
+  #v-theme{margin-top:auto}
+  #v-theme .theme-icon{grid-area:1/1}
+  #v-theme .light-icon{display:none}
+  body.bright #v-theme .dark-icon{display:none}
+  body.bright #v-theme .light-icon{display:block}
   .drawer{flex:1;min-width:0;overflow-y:auto;padding:14px 16px 40px}
   .drawer.hidden{display:none}
   #main{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -67,10 +91,6 @@
   .navgizmo-row{display:flex;gap:4px}
   .navgizmo-mini{background:var(--panel);border:1px solid var(--line);color:var(--text);
     font-size:10px;padding:3px 7px}
-  #v-theme{background:var(--panel);border:1px solid var(--line);
-    width:22px;height:22px;padding:0;border-radius:50%;
-    display:flex;align-items:center;justify-content:center;
-    font-size:12px;line-height:1}
   /* ---------- options bar, below the strip ---------- */
   #viewbar2{display:flex;align-items:center;flex-wrap:wrap;
     gap:12px;background:var(--panel);border-top:1px solid var(--line);
@@ -672,6 +692,26 @@
               <path d="M5 17v3.5h16V17" />
             </svg>
           </button>
+          <!-- ---- night or day ----
+               The viewport's ground, and the chrome with it. It sits at the
+               foot of the rail rather than in the run of drawers above
+               because it is not a drawer and it is not a setting of anything
+               in one: it is about the whole window. -->
+          <button class="rail-btn" id="v-theme" title="Light or dark"
+            aria-label="Toggle light and dark">
+            <svg class="rail-icon theme-icon dark-icon" viewBox="0 0 26 26" fill="none"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15.4A8.6 8.6 0 0 1 10.6 5a8.6 8.6 0 1 0 10.4 10.4z" />
+            </svg>
+            <svg class="rail-icon theme-icon light-icon" viewBox="0 0 26 26" fill="none"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <circle cx="13" cy="13" r="4.6" />
+              <path d="M13 2.6v2.6M13 20.8v2.6M2.6 13h2.6M20.8 13h2.6" />
+              <path d="M5.65 5.65l1.85 1.85M18.5 18.5l1.85 1.85M20.35 5.65L18.5 7.5M7.5 18.5l-1.85 1.85" />
+            </svg>
+          </button>
         </div>
         <div class="drawer" data-drawer="design">
     <h1>Xenachord Designer <small>· Cimbalo Cromatico</small></h1>
@@ -1262,9 +1302,6 @@
       <div class="grp"><span style="color:var(--dim)">separate combs</span>
         <input id="explode" type="range" min="0" max="60" step="1" value="0">
         <span id="explodeval" style="color:var(--dim);width:34px">0 mm</span></div>
-      <div class="grp" style="margin-left:auto">
-        <button id="v-theme" title="Toggle background brightness">⏾</button>
-      </div>
     </div>
   </div>
   </div>
@@ -4716,15 +4753,25 @@ projBtn.onclick=()=>{
 };
 
 const BG_DARK=[0.075,0.08,0.095], BG_LIGHT=[214/255,214/255,214/255];
+/* WHICH ONE WE ARE ON IS ITS OWN FLAG, not something recovered by comparing
+   bgColor against BG_LIGHT. It used to be the comparison, and the comparison
+   was always false on the first press: bgColor starts as `BG_LIGHT.slice()`,
+   a copy, so `===` against the original could not match it and the first
+   click re-asserted bright instead of leaving it. The button appeared dead
+   once per session and worked ever after, which is exactly the kind of fault
+   a character-glyph toggle could hide — the glyph was written by the same
+   branch that was wrong, so icon and state agreed on the wrong answer. */
+let bgLight=true;
 let bgColor=BG_LIGHT.slice();
 document.body.classList.add('bright');
-const themeBtn=$('v-theme');
-themeBtn.textContent='●';
-themeBtn.onclick=()=>{
-  const light=bgColor===BG_LIGHT;
-  bgColor=light?BG_DARK:BG_LIGHT;
-  themeBtn.textContent=light?'⏾':'●';
-  document.body.classList.toggle('bright', !light);
+/* Which glyph is showing is decided in CSS off `body.bright` — see #v-theme
+   above — so this only has to move the state and redraw. It used to also
+   write the button's textContent, which meant the icon and the class could
+   disagree if either was ever set from anywhere else. */
+$('v-theme').onclick=()=>{
+  bgLight=!bgLight;
+  bgColor=(bgLight?BG_LIGHT:BG_DARK).slice();
+  document.body.classList.toggle('bright', bgLight);
   draw();
 };
 
@@ -5197,10 +5244,14 @@ window.addEventListener('keydown',e=>{
 const panelEl = $('panel');
 const railPane = document.querySelector('.rail-pane');
 
+/* `[data-drawer]` rather than every `.rail-btn`: the rail is a run of drawer
+   buttons AND, at its foot, the night/day switch, which opens nothing. Left
+   unqualified these loops would hand that switch an aria-expanded it has no
+   business having and, below, a click handler that replaced its own. */
 function openDrawer(name){
   for(const d of railPane.querySelectorAll('.drawer'))
     d.classList.toggle('hidden', d.dataset.drawer !== name);
-  for(const b of railPane.querySelectorAll('.rail-btn'))
+  for(const b of railPane.querySelectorAll('.rail-btn[data-drawer]'))
     b.setAttribute('aria-expanded', String(b.dataset.drawer === name));
   panelEl.classList.toggle('open', !!name);
 }
@@ -5226,14 +5277,14 @@ function setMode(name){
   showRotateHint();
 }
 
-for(const btn of railPane.querySelectorAll('.rail-btn')){
+for(const btn of railPane.querySelectorAll('.rail-btn[data-drawer]')){
   btn.onclick = ()=>{
     const open = btn.getAttribute('aria-expanded')==='true';
     setMode(btn.dataset.drawer);
     openDrawer(open ? null : btn.dataset.drawer);
   };
 }
-setMode(railPane.querySelector('.rail-btn[aria-expanded="true"]')?.dataset.drawer);
+setMode(railPane.querySelector('.rail-btn[data-drawer][aria-expanded="true"]')?.dataset.drawer);
 
 /* ---- how the app stands up on a phone ----
  * Shut, and in Play.  The rail is still there — Design and Export are one tap
