@@ -7,10 +7,18 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
 <style>
   :root {
-    --bg:#15161a; --panel:#1e1f25; --panel2:#25262e; --panel-bright:#2f313a; --line:#33343d;
-    --text:#e9e9ec; --dim:#9a9ba4; --accent:#6fb7ff; --warn:#ffb454; --ok:#79d18b;
+    /* Night mode is the Notation app's chrome, token for token: neutral greys
+       rather than the blue-black the panel used to be drawn in, and the one
+       #007bff blue that app uses for "this is the one that is true". The
+       three apps sit side by side, and a panel that is tinted in one and not
+       the others reads as a different panel. The strip goes neutral with it,
+       since it meets the panel at a corner and flips with it in day mode; the
+       viewport ground (--bg) and the key colours are the model, not the
+       chrome, and are left as they were. */
+    --bg:#15161a; --panel:#1a1a1a; --panel2:#2a2a2a; --panel-bright:#343434; --line:#555;
+    --text:#fff; --dim:#9a9aa4; --accent:#007bff; --warn:#ffb454; --ok:#79d18b;
     --kw:#f3f3f0; --kb:#2b2b31; --kg:#8d8e95; --palette-bg:var(--panel-bright);
-    --strip-bg:#101116; --scope-bg:#12161c; --spine:#40414a;
+    --strip-bg:#111; --scope-bg:#12161c; --spine:#40414a;
   }
   /* Bright-mode rails: when the viewport background is switched to light
      (v-theme), the left rail/drawer and the bottom viewer bar switch with
@@ -26,8 +34,11 @@
     --strip-bg:#dcdde2; --palette-bg:#d8d9de; --scope-bg:#dcdde2;
   }
   *{box-sizing:border-box}
+  /* Same Inter the Notation app is set in, so the three apps read as one. */
+  @font-face{font-family:"Inter";src:url("fonts/inter.ttf") format("opentype")}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-    font:13px/1.45 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+    font:13px/1.45 "Inter",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+  button,input,select,textarea{font-family:inherit}
   #shell{display:flex;flex-direction:column;height:100%;min-height:0}
   #app{display:flex;flex:1;min-height:0}
 
@@ -346,7 +357,6 @@
    */
   @font-face{font-family:"Bravura";src:url("fonts/Bravura.woff2") format("woff2");font-display:block}
   @font-face{font-family:"EdoAccidentals";src:url("fonts/notes.otf") format("opentype")}
-  @font-face{font-family:"Inter";src:url("fonts/inter.ttf") format("opentype")}
   @font-face{font-family:"HEJI2";src:url("fonts/HEJI2.otf") format("opentype")}
   @font-face{font-family:"HEJIExtensions2022";src:url("fonts/HEJIExtensions2025-Text.ttf") format("opentype")}
 
