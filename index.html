@@ -4762,7 +4762,11 @@ projBtn.onclick=()=>{
   draw();
 };
 
-const BG_DARK=[0.075,0.08,0.095], BG_LIGHT=[214/255,214/255,214/255];
+/* Night is jet black, the ground Tetrads clears its scene to (0x000000) and
+   the Notation app draws its score on (#000), so the three viewports read
+   as one space. It used to be a blue-black ([0.075,0.08,0.095] ≈ #131418)
+   that belonged with the blue-grey chrome the panel no longer wears. */
+const BG_DARK=[0,0,0], BG_LIGHT=[214/255,214/255,214/255];
 /* WHICH ONE WE ARE ON IS ITS OWN FLAG, not something recovered by comparing
    bgColor against BG_LIGHT. It used to be the comparison, and the comparison
    was always false on the first press: bgColor starts as `BG_LIGHT.slice()`,
