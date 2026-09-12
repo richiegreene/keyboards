@@ -3,6 +3,7 @@
   "version": 1,
   "kind": "rig",
   "name": "xenachord-32key-s16.35-upper",
+  "description": "Diatonic layout comprised of two manuals of 17-note keyboards, first demonstrated by Sintel's [Diversion in 34](https://youtu.be/hM7p_VVyeQ0)",
   "saved": "2026-09-06 03:26:21",
   "data": {
     "v": 1,

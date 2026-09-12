@@ -3,7 +3,7 @@
   "version": 1,
   "kind": "keyboard",
   "name": "xenachord-32key-s15.73",
-  "description": "'Reverse diatonic layout' assigning letternames to black-keys",
+  "description": "Diatonic letternames assigned to black-keys; white keys assigned to Paul Elrich's 1998 22EDO [dodecatonic](https://sethares.engr.wisc.edu/paperspdf/Erlich-22.pdf) scale",
   "saved": "2026-09-06 07:06:01",
   "data": {
     "v": 1,
