@@ -1,4 +1,4 @@
-# Xenachord Cimbalo Cromatico Designer
+# Keyboard Designer · Cimbalo Cromatico
 
 A self-contained browser app for designing split-key microtonal ("cimbalo
 cromatico") keyboards. **Open `index.html` in any browser** — no server, no
@@ -757,7 +757,7 @@ when you are measuring against the spine. *Drafting sandbox* reproduces the
 original world position, so the build lands exactly on top of the 15/17/19
 layouts inside `Cimbalo_Cromatico_Drafting_Sandbox_Leveling.blend`.
 
-Whichever mode, the builder creates an empty called **Xenachord Root** at
+Whichever mode, the builder creates an empty called **Keyboard Root** at
 (0, 0, 0) and parents every generated object to it, so the whole keyboard moves,
 rotates and scales from the origin as one. On finishing it prints the bounding
 box and centre it actually achieved, so you can check at a glance.
@@ -791,9 +791,9 @@ Paste it into Blender's Text Editor and press *Run Script*. Structure:
    instantiated at this design's widths. There are no proxy boxes, no
    stand-ins and no analytic approximation of a key.
 
-   Output goes into a new collection, `Xenachord Generated`, split into
+   Output goes into a new collection, `Keyboard Generated`, split into
    `Keys - White` / `Keys - Black` / `Keys - Gray` / `Spine` / `Feet` and
-   parented to a `Xenachord Root` empty at the origin: one object per key
+   parented to a `Keyboard Root` empty at the origin: one object per key
    (named for its sensor foot), one per spine half and layer, one per foot.
    Materials carry the preview's own colours.
 

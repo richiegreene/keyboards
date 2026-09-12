@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Xenachord Designer — Cimbalo Cromatico</title>
+<title>Keyboard Designer — Cimbalo Cromatico</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
 <style>
   :root {
@@ -724,7 +724,7 @@
           </button>
         </div>
         <div class="drawer" data-drawer="design">
-    <h1>Xenachord Designer <small>· Cimbalo Cromatico</small></h1>
+    <h1>Keyboard Designer <small>· Cimbalo Cromatico</small></h1>
 
     <!-- ---- how many of them you are sitting at ----
          The register of one AKM320 is small, and the archicembalo's answer to
@@ -862,7 +862,7 @@
           plan rather than a blank.
         -->
         <div class="drawer hidden" data-drawer="play">
-          <h1>Xenachord Player <small>· Cimbalo Cromatico</small></h1>
+          <h1>Keyboard Player <small>· Cimbalo Cromatico</small></h1>
 
           <fieldset>
             <legend>Scale/Tuning</legend>
@@ -1205,7 +1205,7 @@
           own, it is printed with the keys that stand on it.
         -->
         <div class="drawer hidden" data-drawer="export">
-          <h1>Xenachord Export <small>· Cimbalo Cromatico</small></h1>
+          <h1>Keyboard Export <small>· Cimbalo Cromatico</small></h1>
 
           <fieldset>
             <legend>Print<span id="export-who"></span></legend>
@@ -1607,7 +1607,7 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'
  *
  * To add or change presets: drop a "Save Layout File (.json)" into presets/,
  * delete a file to remove that preset, rename a file to rename it, then run
- * `node build-presets.js` from the xenachord-designer folder. See
+ * `node build-presets.js` from the repo folder. See
  * presets/README.md.
  */
 const CUSTOM_PREFIX = 'custom:';   // kept: saved designs name their preset so
@@ -3876,7 +3876,7 @@ function download(name, buf, mime){
  * one and a second appears.
  */
 const slug = u => (u && (u.rows*u.cols) > 1) ? '-' + u.label.replace(/ /g,'-') : '';
-const nameOf = (LL,u) => `xenachord-32key-s${LL.s.toFixed(2)}${slug(u)}`;
+const nameOf = (LL,u) => `keyboard-32key-s${LL.s.toFixed(2)}${slug(u)}`;
 const baseName = () => nameOf(L, rigUnits().find(u=>u.selected));
 
 /** What pythonLog needs to describe the desk as well as the keyboard. */
@@ -3974,7 +3974,7 @@ document.querySelectorAll('button[data-part]').forEach(b=>{
       if(tris.length) files.push({ name: `${nm}-${p}.stl`, data: XD.toSTL(tris, p) });
     }
     if(!files.length) return toast(`no keyboard in this rig has ${p} parts`);
-    download(`xenachord-32key-s${L.s.toFixed(2)}-rig-${p}.zip`,
+    download(`keyboard-32key-s${L.s.toFixed(2)}-rig-${p}.zip`,
              XD.makeZip(files), 'application/zip');
   };
 });
@@ -4005,7 +4005,7 @@ $('dl-zip').onclick = ()=>{
     files.push({ name: `${dir}${nm}-design-log.py`,
                  data: new TextEncoder().encode(XD.pythonLog(u.L, logOpts(u))) });
   }
-  const zipName = `xenachord-32key-s${L.s.toFixed(2)}` + (many ? '-rig' : '');
+  const zipName = `keyboard-32key-s${L.s.toFixed(2)}` + (many ? '-rig' : '');
   download(`${zipName}.zip`, XD.makeZip(files), 'application/zip');
   if(many) toast(`${units.length} distinct keyboards exported, one folder each`);
 };
@@ -4352,7 +4352,7 @@ $('share-input').onchange = async (e)=>{
   if (!f) return;
   let got = null;
   try { got = XShare.fromFile(await f.text()); } catch(err){}
-  if (!got) return toast(`${f.name} is not a Xenachord layout`);
+  if (!got) return toast(`${f.name} is not a Keyboard Designer layout`);
   takeShared(got, `opened "${f.name}"`);
 };
 
@@ -4762,7 +4762,7 @@ projBtn.onclick=()=>{
   draw();
 };
 
-/* Night is jet black, the ground Tetrads clears its scene to (0x000000) and
+/* Night is jet black, the ground Models clears its scene to (0x000000) and
    the Notation app draws its score on (#000), so the three viewports read
    as one space. It used to be a blue-black ([0.075,0.08,0.095] ≈ #131418)
    that belonged with the blue-grey chrome the panel no longer wears. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* =========================================================================
- * Xenachord Designer — BUILD PRESETS FROM THE presets/ FOLDER
+ * Keyboard Designer — BUILD PRESETS FROM THE presets/ FOLDER
  * =========================================================================
  *
  * The presets/ folder is the drag-and-drop preset library: drop a
@@ -95,7 +95,7 @@ function main() {
     try { text = fs.readFileSync(full, 'utf8'); }
     catch (e) { console.warn(`skipped ${file}: could not read (${e.message})`); continue; }
     const got = presetFromFile(text, name);
-    if (!got) { console.warn(`skipped ${file}: not a Xenachord layout file`); continue; }
+    if (!got) { console.warn(`skipped ${file}: not a Keyboard Designer layout file`); continue; }
     presets[name] = got.entry;
     if (got.info) info[name] = got.info;
   }
@@ -117,7 +117,7 @@ function main() {
  *   - rename its file to rename the preset
  * then run \`node build-presets.js\` to regenerate this file. Each dropped
  * file already carries its tuning/notation and timbre/synth session, saved
- * exactly as Xenachord Designer wrote it.
+ * exactly as Keyboard Designer wrote it.
  *
  * A preset may also say something about itself, by hand-adding top-level
  * fields to its .json: "description" (shown small and dim beside the name,

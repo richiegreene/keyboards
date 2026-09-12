@@ -1,5 +1,5 @@
 /* =========================================================================
- * Xenachord Designer — DESIGN CORE
+ * Keyboard Designer — DESIGN CORE
  *
  * Layout engine, mesh assembly, STL / ZIP export and the Blender Python log.
  * All geometry and sizing comes from model.js (XM), which is measured out of
@@ -1591,7 +1591,7 @@
     const n = tris.length / 9;
     const buf = new ArrayBuffer(84 + n * 50);
     const dv = new DataView(buf);
-    const h = 'Xenachord Designer - ' + (name || 'part');
+    const h = 'Keyboard Designer - ' + (name || 'part');
     for (let i = 0; i < Math.min(79, h.length); i++) dv.setUint8(i, h.charCodeAt(i));
     dv.setUint32(80, n, true);
     let o = 84;
@@ -1703,7 +1703,7 @@
     const seen = usedProfiles(L);      // tags every note with its profile key
 
     p('# =========================================================================');
-    p('# XENACHORD DESIGNER — DESIGN LOG');
+    p('# KEYBOARD DESIGNER — DESIGN LOG');
     p('# generated ', now, '  (paste into Blender\'s Text Editor and Run Script)');
     p('#');
     p('# WORLD PLACEMENT: ', ORIGIN_MODES[O.mode]);
@@ -2244,8 +2244,8 @@ import math
 import bpy
 from mathutils import Vector
 
-TARGET_COLLECTION    = "Xenachord Generated"
-ROOT_EMPTY           = "Xenachord Root"
+TARGET_COLLECTION    = "Keyboard Generated"
+ROOT_EMPTY           = "Keyboard Root"
 CATEGORY_COLLECTION  = "Key Type Categories"
 USE_BLEND_CATEGORIES = False
 
@@ -2985,7 +2985,7 @@ def new_collection(name, parent):
 
 def get_material(key):
     rgb = COLOURS[key]
-    name = "Xenachord " + key
+    name = "Keyboard " + key
     m = bpy.data.materials.get(name)
     if m is None:
         m = bpy.data.materials.new(name)
@@ -3011,7 +3011,7 @@ def get_spine_material(kind, layer_name):
     than one key colour, so they fall back to SPINE_LAYER_COLOURS' own entry
     for that band (still not the flat spine grey)."""
     rgb = SPINE_LAYER_COLOURS.get(kind, {}).get(layer_name, COLOURS.get("spine", (0.3, 0.3, 0.3)))
-    name = "Xenachord Spine %s %s" % (kind, layer_name)
+    name = "Keyboard Spine %s %s" % (kind, layer_name)
     m = bpy.data.materials.get(name)
     if m is None:
         m = bpy.data.materials.new(name)
@@ -3050,7 +3050,7 @@ def check_parity(name, tris):
     got = mesh_checksum(tris)
     if got != want:
         raise RuntimeError(
-            "Xenachord: %s is not the mesh the browser built "
+            "Keyboard Designer: %s is not the mesh the browser built "
             "(checksum %d, expected %d).  model.js and this generated "
             "builder have drifted apart; the STLs and this scene would "
             "not be the same objects." % (name, got, want))
@@ -3238,7 +3238,7 @@ def build():
     # report where it actually landed
     meshes = [ob for ob in objects if ob.type == "MESH"]
     pts = [ob.matrix_world @ Vector(c) for ob in meshes for c in ob.bound_box]
-    print("Xenachord: %d keys, %d spine parts, %d presses  (%s)"
+    print("Keyboard Designer: %d keys, %d spine parts, %d presses  (%s)"
           % (len(KEYS), len(part["Spine"].objects),
              len(part["Sensor Press"].objects),
              "sandbox objects" if USE_BLEND_CATEGORIES else
@@ -3248,9 +3248,9 @@ def build():
         bx = (min(p.x for p in pts), max(p.x for p in pts))
         by = (min(p.y for p in pts), max(p.y for p in pts))
         bz = (min(p.z for p in pts), max(p.z for p in pts))
-        print("Xenachord bbox  X %9.4f .. %9.4f   Y %9.4f .. %9.4f   Z %9.4f .. %9.4f"
+        print("Keyboard Designer bbox  X %9.4f .. %9.4f   Y %9.4f .. %9.4f   Z %9.4f .. %9.4f"
               % (bx[0], bx[1], by[0], by[1], bz[0], bz[1]))
-        print("Xenachord centre %.4f, %.4f, %.4f   (origin mode: %s)"
+        print("Keyboard Designer centre %.4f, %.4f, %.4f   (origin mode: %s)"
               % ((bx[0] + bx[1]) / 2.0, (by[0] + by[1]) / 2.0,
                  (bz[0] + bz[1]) / 2.0, ORIGIN))
 

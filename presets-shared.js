@@ -14,7 +14,7 @@
  *   - rename its file to rename the preset
  * then run `node build-presets.js` to regenerate this file. Each dropped
  * file already carries its tuning/notation and timbre/synth session, saved
- * exactly as Xenachord Designer wrote it.
+ * exactly as Keyboard Designer wrote it.
  *
  * A preset may also say something about itself, by hand-adding top-level
  * fields to its .json: "description" (shown small and dim beside the name,

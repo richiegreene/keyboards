@@ -1,5 +1,5 @@
 /* =========================================================================
- * Xenachord Designer — DRAFTED KEY PROFILES  (generated data, do not edit)
+ * Keyboard Designer — DRAFTED KEY PROFILES  (generated data, do not edit)
  *
  * Read out of Cimbalo_Cromatico_Drafting_Sandbox_Leveling.blend, from the
  * 15, 17 and 19 Layout collections.  Each vertex is stored as

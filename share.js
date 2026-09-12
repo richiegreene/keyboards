@@ -1,5 +1,5 @@
 /* =========================================================================
- * Xenachord Designer — SENDING A LAYOUT TO SOMEBODY ELSE
+ * Keyboard Designer — SENDING A LAYOUT TO SOMEBODY ELSE
  *
  * A design is small.  Key types by slot, four class widths, the per-key
  * adjustments, the scale, the break on the playing edge — a few hundred

@@ -1,5 +1,5 @@
 /* =========================================================================
- * Xenachord Designer — BLENDER MODEL
+ * Keyboard Designer — BLENDER MODEL
  *
  * Every constant in this file was measured directly out of
  *   Cleaning Cimbalo Designs for Automated Design/

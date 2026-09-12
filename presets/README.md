@@ -37,7 +37,7 @@ Each downloaded layout file already carries everything: key types, widths,
 scale, and — because "Save Layout File" saves the whole session — the
 tuning/notation and timbre/synth settings that were active when you saved it.
 
-After changing this folder, run from the `xenachord-designer` directory:
+After changing this folder, run from the repo directory:
 
 ```
 node build-presets.js
