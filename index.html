@@ -2,9 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- viewport-fit=cover: the page claims the whole glass — under the notch in
+     landscape and, installed to the home screen, under the status bar — and
+     #shell keeps its content clear of them with env(safe-area-inset-*).
+     Without it iOS letterboxes the notch side. resetPageZoom below rewrites
+     this tag; VP_BASE carries the same value. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Keyboard Designer — Cimbalo Cromatico</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+<link rel="icon" type="image/png" href="favicon.png?v=3">
+<!-- Installable. "Add to Home Screen" from Safari or Chrome opens the app
+     standalone: no address bar, no toolbars, the full screen in either
+     orientation — and none of Chrome's rotate bug, since iOS runs a
+     home-screen web app in its own WebKit container whichever browser
+     installed it. In an ordinary tab these change nothing. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Keyboards">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#15161a">
 <style>
   :root {
     /* Night mode is the Notation app's chrome, token for token: neutral greys
@@ -39,7 +56,13 @@
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font:13px/1.45 "Inter",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
   button,input,select,textarea{font-family:inherit}
-  #shell{display:flex;flex-direction:column;height:100%;min-height:0}
+  /* Edge to edge (viewport-fit=cover above), so the status bar, the notch
+     and the home indicator are over the page rather than beside it; the
+     insets are what iOS says they cover — nothing on a desktop or in an
+     ordinary tab — and the panel and the strip are kept inside them. */
+  #shell{display:flex;flex-direction:column;height:100%;min-height:0;
+    padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
+            env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
   #app{display:flex;flex:1;min-height:0}
 
   /* ----------  side rail + drawer  ----------
@@ -1399,7 +1422,7 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
  * shape before it is stale by definition. A zoom set deliberately while the
  * phone is held still is left exactly where it was put.
  */
-const VP_BASE = 'width=device-width, initial-scale=1';
+const VP_BASE = 'width=device-width, initial-scale=1, viewport-fit=cover';
 function resetPageZoom(){
   const vp = document.querySelector('meta[name=viewport]');
   const vv = window.visualViewport;
@@ -2499,33 +2522,6 @@ function fitStripHeight(){
  */
 function refitStrip(){ fitStripHeight(); showRotateHint(); }
 
-/* ---- THE GLASS CHROME FORGOT TO HAND OVER ----
- * Chrome on iOS, turned to landscape, keeps sizing the page as though its
- * bottom toolbar were still there: the toolbar has gone, but the page is
- * told a height a toolbar short of the screen, and stays short until a
- * scroll or a reload. dvh cannot help — it is the browser's own figure, and
- * the figure is the thing that is wrong. The visual viewport, though, is
- * measured from what is actually on the glass, so when it is taller than
- * #shell the difference is screen going unused, and #shell is set to it in
- * pixels; the ResizeObserver on #app below then refits the strip to the
- * box it should have had.
- *
- * Only ever taller. When the visible box is SMALLER than #shell — the URL
- * bar back up, the keyboard open over a field — the inline height is
- * cleared and the stylesheet's dvh answers as before, so typing does not
- * squash the keyboard to fit above the keys. */
-function fillForgottenGlass(){
-  const shell = $('shell'), vv = window.visualViewport;
-  if (!shell || !vv) return;
-  shell.style.height = '';
-  const have = shell.getBoundingClientRect().height;
-  const glass = Math.max(vv.height, window.innerHeight || 0);
-  if (glass - have > 2) shell.style.height = Math.round(glass) + 'px';
-}
-/* The shell first, the strip second: a fit computed against the short box
- * is a fit for a screen that is not there. */
-function refitScreen(){ fillForgottenGlass(); refitStrip(); }
-
 /* ANSWERED NOW, AND AGAIN ONCE THE LAYOUT HAS CAUGHT UP.  This is the whole
  * of why rotating used to leave the keyboard wrong until it was toggled off
  * and back: the events that announce a new screen shape are delivered while
@@ -2537,10 +2533,10 @@ function refitScreen(){ fillForgottenGlass(); refitStrip(); }
  * browser happens to settle on. */
 let refitFrame = 0;
 function refitSoon(){
-  refitScreen();
+  refitStrip();
   cancelAnimationFrame(refitFrame);
-  refitFrame = requestAnimationFrame(refitScreen);
-  setTimeout(refitScreen, 320);
+  refitFrame = requestAnimationFrame(refitStrip);
+  setTimeout(refitStrip, 320);
 }
 addEventListener('resize', refitSoon);
 addEventListener('orientationchange', () => { resetPageZoom(); refitSoon(); });
