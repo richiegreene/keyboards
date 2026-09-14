@@ -171,7 +171,10 @@
      dropdown gets cut off at the fieldset's edge */
   /* color, not just the vars: text colour inherits from <body>, which is on
      the dark palette even in bright mode */
-  .preset-list{position:fixed;z-index:20;color:var(--text);
+  /* z-index above the phone's open drawer (40, below): the list is fixed to
+     the body, not inside the drawer, and a sheet that covers the screen
+     would otherwise cover the menu the button in it just opened */
+  .preset-list{position:fixed;z-index:50;color:var(--text);
     max-height:260px;overflow-y:auto;background:var(--panel2);
     border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
   .preset-list .opt{padding:5px 7px;font-size:12.5px;cursor:pointer}
@@ -1701,6 +1704,10 @@ presetBtn.onclick = () => {
   presetList.style.left = r.left + 'px';
   presetList.style.width = r.width + 'px';
   presetList.style.top = (r.bottom + 2) + 'px';
+  /* No taller than the screen has room for beneath the button — a phone on
+   * its side has ~150px there, and a list that runs off the bottom cannot
+   * be scrolled to its end. The list scrolls inside whatever it is given. */
+  presetList.style.maxHeight = Math.max(100, Math.min(260, innerHeight - r.bottom - 12)) + 'px';
   for (const opt of presetOptions){
     const row = document.createElement('div');
     row.className = 'opt';
