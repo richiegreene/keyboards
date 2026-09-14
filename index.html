@@ -2,26 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- viewport-fit=cover: the page claims the whole glass — under the notch in
-     landscape and, installed to the home screen, under the status bar — and
-     #shell keeps its content clear of them with env(safe-area-inset-*).
-     Without it iOS letterboxes the notch side. resetPageZoom below rewrites
-     this tag; VP_BASE carries the same value. -->
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Keyboard Designer — Cimbalo Cromatico</title>
-<link rel="icon" type="image/png" href="favicon.png?v=3">
-<!-- Installable. "Add to Home Screen" from Safari or Chrome opens the app
-     standalone: no address bar, no toolbars, the full screen in either
-     orientation — and none of Chrome's rotate bug, since iOS runs a
-     home-screen web app in its own WebKit container whichever browser
-     installed it. In an ordinary tab these change nothing. -->
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Keyboards">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#15161a">
+<link rel="icon" type="image/png" href="favicon.png?v=4" sizes="any">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=4">
 <style>
   :root {
     /* Night mode is the Notation app's chrome, token for token: neutral greys
@@ -56,13 +40,7 @@
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font:13px/1.45 "Inter",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
   button,input,select,textarea{font-family:inherit}
-  /* Edge to edge (viewport-fit=cover above), so the status bar, the notch
-     and the home indicator are over the page rather than beside it; the
-     insets are what iOS says they cover — nothing on a desktop or in an
-     ordinary tab — and the panel and the strip are kept inside them. */
-  #shell{display:flex;flex-direction:column;height:100%;min-height:0;
-    padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px)
-            env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+  #shell{display:flex;flex-direction:column;height:100%;min-height:0}
   #app{display:flex;flex:1;min-height:0}
 
   /* ----------  side rail + drawer  ----------
@@ -1422,7 +1400,7 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
  * shape before it is stale by definition. A zoom set deliberately while the
  * phone is held still is left exactly where it was put.
  */
-const VP_BASE = 'width=device-width, initial-scale=1, viewport-fit=cover';
+const VP_BASE = 'width=device-width, initial-scale=1';
 function resetPageZoom(){
   const vp = document.querySelector('meta[name=viewport]');
   const vv = window.visualViewport;
