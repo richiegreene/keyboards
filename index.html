@@ -2499,6 +2499,33 @@ function fitStripHeight(){
  */
 function refitStrip(){ fitStripHeight(); showRotateHint(); }
 
+/* ---- THE GLASS CHROME FORGOT TO HAND OVER ----
+ * Chrome on iOS, turned to landscape, keeps sizing the page as though its
+ * bottom toolbar were still there: the toolbar has gone, but the page is
+ * told a height a toolbar short of the screen, and stays short until a
+ * scroll or a reload. dvh cannot help — it is the browser's own figure, and
+ * the figure is the thing that is wrong. The visual viewport, though, is
+ * measured from what is actually on the glass, so when it is taller than
+ * #shell the difference is screen going unused, and #shell is set to it in
+ * pixels; the ResizeObserver on #app below then refits the strip to the
+ * box it should have had.
+ *
+ * Only ever taller. When the visible box is SMALLER than #shell — the URL
+ * bar back up, the keyboard open over a field — the inline height is
+ * cleared and the stylesheet's dvh answers as before, so typing does not
+ * squash the keyboard to fit above the keys. */
+function fillForgottenGlass(){
+  const shell = $('shell'), vv = window.visualViewport;
+  if (!shell || !vv) return;
+  shell.style.height = '';
+  const have = shell.getBoundingClientRect().height;
+  const glass = Math.max(vv.height, window.innerHeight || 0);
+  if (glass - have > 2) shell.style.height = Math.round(glass) + 'px';
+}
+/* The shell first, the strip second: a fit computed against the short box
+ * is a fit for a screen that is not there. */
+function refitScreen(){ fillForgottenGlass(); refitStrip(); }
+
 /* ANSWERED NOW, AND AGAIN ONCE THE LAYOUT HAS CAUGHT UP.  This is the whole
  * of why rotating used to leave the keyboard wrong until it was toggled off
  * and back: the events that announce a new screen shape are delivered while
@@ -2510,10 +2537,10 @@ function refitStrip(){ fitStripHeight(); showRotateHint(); }
  * browser happens to settle on. */
 let refitFrame = 0;
 function refitSoon(){
-  refitStrip();
+  refitScreen();
   cancelAnimationFrame(refitFrame);
-  refitFrame = requestAnimationFrame(refitStrip);
-  setTimeout(refitStrip, 320);
+  refitFrame = requestAnimationFrame(refitScreen);
+  setTimeout(refitScreen, 320);
 }
 addEventListener('resize', refitSoon);
 addEventListener('orientationchange', () => { resetPageZoom(); refitSoon(); });
