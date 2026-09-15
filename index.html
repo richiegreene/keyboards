@@ -1301,9 +1301,13 @@
                 title="A runnable Blender script that rebuilds the design from the Key Type Categories collection.">⧉ Copy Python Log</button>
               <button class="wide" id="dl-py">⬇︎ Save design log (.py)</button>
               <button id="dl-svg"
-                title="Save the layout currently displayed in Play, including its selected tuning and notation">⬇︎ Save design (.svg)</button>
+                title="Save the layout currently displayed in Play, including its selected tuning and notation">⬇︎ 2D design (.svg)</button>
               <button id="dl-png"
-                title="Save the layout currently displayed in Play as a PNG image">⬇︎ Save design (.png)</button>
+                title="Save the layout currently displayed in Play as a PNG image">⬇︎ 2D design (.png)</button>
+              <button id="dl-3d-svg"
+                title="Save the 3D view as a vector drawing — the keyboard from the angle it is shown at, fitted to size, with no ground. Two Inkscape layers: the shaded faces, and the edge lines over them.">⬇︎ 3D design (.svg)</button>
+              <button id="dl-3d-png"
+                title="Save the 3D view as a picture — the keyboard from the angle it is shown at, fitted to size, on a transparent ground.">⬇︎ 3D design (.png)</button>
             </div>
           </fieldset>
 
@@ -4623,11 +4627,11 @@ void main(){
  float fill=max(dot(n,normalize(vec3(-0.5,0.6,0.2))),0.0);
  float head=max(dot(n,v),0.0);
  gl_FragColor=vec4(min(uC*(0.34+0.46*key+0.16*fill+0.28*head),vec3(1.0)),1.0);}`;
-let locPos,locNrm,locMVP,locC,locEye,locOfs;
+let locPos,locNrm,locMVP,locC,locEye,locOfs,mainProg=null;
 if (gl){
   const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);
     if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;};
-  const pr=gl.createProgram();
+  const pr=mainProg=gl.createProgram();
   gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS)); gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));
   gl.linkProgram(pr); gl.useProgram(pr);
   locPos=gl.getAttribLocation(pr,'aPos'); locNrm=gl.getAttribLocation(pr,'aNrm');
@@ -4680,8 +4684,9 @@ function uploadRig(){
   if(pickBuf){ gl.deleteBuffer(pickBuf.buf); pickBuf=null; }
 }
 
-function makeBufs(meshes){
-  const buffers = {};
+/* Every mesh of a build that gets drawn, under the key it is drawn as —
+ * the walk makeBufs uploads by and the vector tracer reads by. */
+function eachDrawnMesh(meshes, fn){
   for(const k of Object.keys(meshes)){
     if(k==='spine'||k==='spineLayers') continue;      // spine goes in per layer
     if(k==='press'||k==='pressLayers') continue;      // press goes in per colour
@@ -4692,14 +4697,18 @@ function makeBufs(meshes){
        may still carry the key. */
     if(k==='feet') continue;
     if(!Array.isArray(meshes[k])) continue;           // e.g. pressLayers, an object
-    if(meshes[k].length) buffers[k]=meshToBuffer(meshes[k]);
+    if(meshes[k].length) fn(k, meshes[k]);
   }
   const SL = meshes.spineLayers || {};
   for(const lay of Object.keys(SL))
-    if(SL[lay].length) buffers['spine:'+lay]=meshToBuffer(SL[lay]);
+    if(SL[lay].length) fn('spine:'+lay, SL[lay]);
   const PL = meshes.pressLayers || {};
   for(const lay of Object.keys(PL))
-    if(PL[lay].length) buffers['press:'+lay]=meshToBuffer(PL[lay]);
+    if(PL[lay].length) fn('press:'+lay, PL[lay]);
+}
+function makeBufs(meshes){
+  const buffers = {};
+  eachDrawnMesh(meshes, (k, tris)=>{ buffers[k]=meshToBuffer(tris); });
   return buffers;
 }
 
@@ -4871,12 +4880,18 @@ function camBasis(){
 }
 function fit(){ if(!L) return;
   const w = canvas.clientWidth||1200, h = canvas.clientHeight||700;
-  const aspect = w/h, tn = Math.tan(FOV/2);
+  if(frameRig(w/h)) draw(); }
+/* Points the camera's target at the rig and backs off far enough to hold
+ * it in a viewport of the given aspect; the angle it is seen from is left
+ * alone.  Shared by the fit button and the 3D picture, which frames into a
+ * canvas of its own size rather than the one on screen. */
+function frameRig(aspect){
+  const tn = Math.tan(FOV/2);
   /* The frame is the RIG, not the design: a second unit set beside or above
    * the first is part of what there is to look at, so fit walks the units
    * rather than assuming there is one at the origin. */
   const units = rigUnits();
-  if(!units.length) return;
+  if(!units.length) return false;
   const last = units[units.length-1];
   let rigW = 0;
   for(const u of units) if(u.L) rigW = Math.max(rigW, u.dx + u.L.width);
@@ -4886,7 +4901,7 @@ function fit(){ if(!L) return;
   cam.tx = rigW/2; cam.ty = (yFront + yBack)/2; cam.tz = 4 + last.dz/2;
   const halfW = (rigW + 60)/2, halfH = ((yFront - yBack) + last.dz + 40)/2;
   cam.dist = Math.max(halfW/(aspect*tn), halfH/tn, 60);
-  draw(); }
+  return true; }
 
 const VIEWS = {
   iso:    {yaw: 0.28, pitch: 0.70},
@@ -5131,14 +5146,31 @@ function draw(){
   if(!(w>0&&h>0)) return;
   if(canvas.width!==w*devicePixelRatio||canvas.height!==h*devicePixelRatio){
     canvas.width=w*devicePixelRatio; canvas.height=h*devicePixelRatio; }
-  gl.viewport(0,0,canvas.width,canvas.height);
-  gl.clearColor(...bgColor,1);
-  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  drawScene(w/h, [...bgColor,1], false);
+  $('camread').textContent =
+    `az ${(cam.yaw*180/Math.PI).toFixed(0).padStart(4)}°  ` +
+    `el ${(cam.pitch*180/Math.PI).toFixed(0).padStart(4)}°  ` +
+    `${cam.dist.toFixed(0)} mm` + (cam.pitch<0 ? '   · viewing from below' : '');
+  drawGizmo();
+}
+/* Where the camera is and what it projects through, for a frame of the
+ * given aspect: the one matrix both the GL passes and the tracer use. */
+function sceneMVP(aspect){
   const B=camBasis();
   const proj = projMode==='persp'
-    ? persp(FOV, w/h, 0.5, 20000)
-    : ortho(cam.dist*Math.tan(FOV/2), w/h, 0.5, 20000);
-  const mvp=mat4mul(proj,lookAtBasis(B.eye,B.right,B.up,B.fwd));
+    ? persp(FOV, aspect, 0.5, 20000)
+    : ortho(cam.dist*Math.tan(FOV/2), aspect, 0.5, 20000);
+  return { B, mvp: mat4mul(proj,lookAtBasis(B.eye,B.right,B.up,B.fwd)) };
+}
+/* The rig, drawn into whatever the canvas's drawing buffer currently is:
+ * the screen, or a buffer sized for a picture.  `plain` leaves out the
+ * inspector's pick and the keys that are sounding — a picture is of the
+ * design, not of what the desk happened to be doing. */
+function drawScene(aspect, clear, plain){
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(...clear);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const {B, mvp} = sceneMVP(aspect);
   gl.uniformMatrix4fv(locMVP,false,mvp);
   gl.uniform3fv(locEye, B.eye);
   /* ONE DESIGN, DRAWN AGAIN PER UNIT.  Every AKM320 in the rig is the same
@@ -5157,6 +5189,7 @@ function draw(){
       drawPart(b, colorOf(k, kind), [u.dx, u.dy, z+u.dz]);
     }
   }
+  if(plain) return;
   // highlight pass: nudged toward the camera so it always wins the depth test
   const lift = mul(norm(sub(B.eye,B.tgt)), Math.max(0.25, cam.dist*0.0016));
   if(picked && pickBuf && visible[picked.part]){
@@ -5172,11 +5205,6 @@ function draw(){
     const u=sb.unit||ORIGIN_UNIT;
     drawPart(sb.buf, ACCENT, [u.dx+lift[0], u.dy+lift[1], z+u.dz+lift[2]]);
   }
-  $('camread').textContent =
-    `az ${(cam.yaw*180/Math.PI).toFixed(0).padStart(4)}°  ` +
-    `el ${(cam.pitch*180/Math.PI).toFixed(0).padStart(4)}°  ` +
-    `${cam.dist.toFixed(0)} mm` + (cam.pitch<0 ? '   · viewing from below' : '');
-  drawGizmo();
 }
 
 /* ---- orbit / pan / zoom : screen-space pan works from any angle ---- */
@@ -5226,6 +5254,515 @@ canvas.addEventListener('wheel',e=>{e.preventDefault();
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('dblclick',()=>{ picked=null; $('inspect').classList.remove('on'); draw(); });
 new ResizeObserver(draw).observe(canvas);
+
+/* ===================== the 3D view as a picture =====================
+ *
+ * WHAT YOU SEE, FITTED.  The picture keeps the angle and the projection
+ * the view is set to — that is the "given depiction" — but not its zoom
+ * or its pan: the camera is backed off to hold the whole rig, the picture
+ * is then trimmed to the pixels the rig actually covers, so the file is
+ * the keyboard and a thin margin, whatever the window happened to be.
+ *
+ * NO GROUND UNDER IT, for the same reason the 2D picture has none: the
+ * view's backdrop is the app's furniture. The scene is cleared to nothing
+ * and the keyboard is the only thing that leaves a mark.
+ *
+ * SIGHTING SHOTS, THEN THE SHOT.  The GL canvas is borrowed for all of
+ * them — its drawing buffer is resized, drawn into, read back and put
+ * back the size it was, all inside one click, so nothing on screen
+ * changes.  The sighting shots are small: each one only says where in the
+ * frame the rig fell, and the camera is re-aimed at that spot and moved
+ * in or out until the rig fills the frame to a margin.  It takes more
+ * than one because in perspective the near end of a keyboard grows
+ * faster than the far end as the camera closes in, so a single estimate
+ * from a flat-at-the-target guess overshoots on a view down its length.
+ * The last shot is as large as the GPU will render, at the frame the
+ * sighting settled on, so the resolution is spent on the keyboard and
+ * not on the air around it.
+ */
+const PIC_PROBE = 640;       // px, the long side of a sighting shot
+const PIC_SIDE  = 4096;      // px, the long side of the picture
+const PIC_PAD   = 12;        // px of margin the trim leaves round the rig
+const PIC_FILL  = 0.92;      // how much of the frame the rig is aimed to fill
+
+/* The drawing buffer's contents, and the box the drawn pixels fall in.
+ * readPixels hands rows back bottom-up; the box is stated top-down, the
+ * way a canvas and the pan maths count. */
+function shootScene(W, H){
+  canvas.width = W; canvas.height = H;
+  drawScene(W/H, [0,0,0,0], true);
+  const px = new Uint8Array(W*H*4);
+  gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  let x0=W, y0=H, x1=-1, y1=-1;
+  for(let r=0; r<H; r++){
+    const y = H-1-r, row = r*W*4;
+    for(let x=0; x<W; x++) if(px[row+x*4+3]){
+      if(x<x0) x0=x; if(x>x1) x1=x; if(y<y0) y0=y; if(y>y1) y1=y;
+    }
+  }
+  return { px, W, H, box: x1<0 ? null : {x0,y0,x1,y1} };
+}
+
+/* A frame of the given aspect with its long side `side` px. */
+function frameSize(aspect, side){
+  return aspect >= 1
+    ? [side, Math.max(1, Math.round(side/aspect))]
+    : [Math.max(1, Math.round(side*aspect)), side];
+}
+
+/* Frames the rig for a picture, hands the frame's size to `fn` with the
+ * camera aimed and the canvas free to be drawn into, and puts the desk
+ * back however `fn` left it.  The raster and the vector picture are both
+ * made this way; the only difference is what `fn` does with the frame. */
+function withPicture(fn){
+  if(!gl || !rigUnits().length) return null;
+  const saved = Object.assign({}, cam), savedW = canvas.width, savedH = canvas.height;
+  const maxSide = Math.min(PIC_SIDE, ...(gl.getParameter(gl.MAX_VIEWPORT_DIMS)||[PIC_SIDE,PIC_SIDE]));
+  try {
+    /* --- sighting: start generously framed, then close in on the rig --- */
+    if(!frameRig(1)) return null;
+    cam.dist *= 1.6;
+    let aspect = 1, W, H, b = null;
+    /* the last framing that held the whole rig, and how much of the ideal
+     * move to take next: a step that clips is undone and the next one is
+     * half the size, so perspective's near-end growth is walked up to
+     * rather than argued with */
+    let good = null, step = 1;
+    const snap = () => ({ cam: Object.assign({}, cam), aspect });
+    const back = g => { Object.assign(cam, g.cam); aspect = g.aspect; };
+    for(let i=0; i<12; i++){
+      [W, H] = frameSize(aspect, PIC_PROBE);
+      b = shootScene(W, H).box;
+      if(!b){ cam.dist *= 1.6; continue; }          // nothing in frame: back off
+      const clipped = b.x0<=0 || b.y0<=0 || b.x1>=W-1 || b.y1>=H-1;
+      if(clipped){
+        if(good){ back(good); step *= 0.5; } else cam.dist *= 1.6;
+        continue;
+      }
+      good = snap();
+      const bw = b.x1-b.x0+1, bh = b.y1-b.y0+1, fill = bh/H;
+      if(fill >= PIC_FILL-0.06 && fill <= PIC_FILL+0.04) break;
+      /* the target slides across the view plane to the box's centre — the
+       * same px→mm rule the pan uses — and the frame takes the box's
+       * aspect.  The vertical field of view is what a frame keeps, so it
+       * is the vertical fill that says how far to move. */
+      const B = camBasis(), s = cam.dist*Math.tan(FOV/2)*2/H;
+      const cx = (b.x0+b.x1+1)/2 - W/2, cy = (b.y0+b.y1+1)/2 - H/2;
+      const shift = add(mul(B.right, cx*s), mul(B.up, -cy*s));
+      cam.tx += shift[0]; cam.ty += shift[1]; cam.tz += shift[2];
+      aspect = bw/bh;
+      cam.dist *= Math.pow(fill/PIC_FILL, step);
+    }
+    if(!good) return null;
+    back(good);
+    /* --- the picture, at the frame the sighting settled on --- */
+    [W, H] = frameSize(aspect, maxSide);
+    return fn(W, H);
+  } finally {
+    Object.assign(cam, saved);
+    canvas.width = savedW; canvas.height = savedH;
+    draw();
+  }
+}
+
+/* The picture as an opaque-on-transparent 2D canvas, trimmed to the rig. */
+function render3d(){
+  return withPicture((W, H)=>{
+    const shot = shootScene(W, H);
+    if(!shot.box) return null;
+    /* --- trim to the rig, un-premultiply the antialiased edge, flip --- */
+    const x0 = Math.max(0, shot.box.x0-PIC_PAD), y0 = Math.max(0, shot.box.y0-PIC_PAD);
+    const x1 = Math.min(W-1, shot.box.x1+PIC_PAD), y1 = Math.min(H-1, shot.box.y1+PIC_PAD);
+    const cw = x1-x0+1, ch = y1-y0+1;
+    const out = document.createElement('canvas'); out.width = cw; out.height = ch;
+    const ctx = out.getContext('2d'), img = ctx.createImageData(cw, ch), d = img.data;
+    for(let y=0; y<ch; y++){
+      const src = ((H-1-(y0+y))*W + x0)*4, dst = y*cw*4;
+      for(let i=0; i<cw*4; i+=4){
+        const a = shot.px[src+i+3];
+        if(!a) continue;
+        const k = 255/a;
+        d[dst+i]   = Math.min(255, shot.px[src+i]*k);
+        d[dst+i+1] = Math.min(255, shot.px[src+i+1]*k);
+        d[dst+i+2] = Math.min(255, shot.px[src+i+2]*k);
+        d[dst+i+3] = a;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return out;
+  });
+}
+
+$('dl-3d-png').onclick = ()=>{
+  const pic = render3d();
+  if(!pic) return toast('nothing to export — open a layout first');
+  pic.toBlob(blob=>{
+    if(blob) download(`${baseName()}-design-3d.png`, blob, 'image/png');
+    else toast('could not render the 3D picture');
+  }, 'image/png');
+};
+/* ===================== the 3D view as a drawing =====================
+ *
+ * THE SAME PICTURE, IN LINES.  The SVG is not the raster in a frame: it
+ * is the rig's own triangles, projected through the same camera the
+ * raster is shot with, as two Inkscape layers — the faces, each a flat
+ * polygon in the shade the shader would give it, and over them the
+ * edges, the lines a draughtsman would draw.  Both scale as vectors.
+ *
+ * WHAT IS HIDDEN IS LEFT OUT.  An SVG has no depth buffer, so which face
+ * is in front has to be settled here.  The GL does the settling: the
+ * scene is drawn once more into an off-screen buffer with every triangle
+ * in a colour that is its number, and reading that buffer back says
+ * exactly which triangles reach the eye.  The rest are dropped, so the
+ * file carries the visible surface and nothing behind it.
+ *
+ * AND WHAT ORDER TO DRAW IT IN.  Sorting the survivors by depth is not
+ * enough: a key's side wall is one long triangle whose middle is nearer
+ * than the middle of the key's top, and sorted by that it would be drawn
+ * over the top it is actually beneath.  So the number buffer settles the
+ * order too.  Every surviving triangle is walked pixel by pixel, and
+ * wherever the buffer names a different triangle, that one is in front
+ * there and must be drawn later — a set of rulings the triangles are
+ * then sorted by, farthest first among the unruled.
+ *
+ * AN EDGE IS A CREASE OR A SILHOUETTE.  Of the edges between triangles,
+ * only two kinds are lines: where the surface bends sharply, and where it
+ * turns away from the camera.  A rounded bevel is eight shallow strips,
+ * so its outline is the silhouette and not the creases.  Each line is
+ * then walked through the same number buffer, and the stretches that
+ * pass behind something else are cut out, so a key in front of a spine
+ * band leaves no ghost of the band's edge across itself.
+ */
+const EDGE_CREASE = Math.cos(30*Math.PI/180);  // bends sharper than 30° are lines
+const EDGE_STEP   = 3;                          // px between visibility samples
+const EDGE_WIDTH  = 2;                          // px, at the picture's own scale
+const EDGE_COLOUR = '#1a1a1a';
+const ORDER_STEP  = 2;                          // px between ordering samples
+
+/* Calls fn(x,y) for the pixel centres inside the screen triangle, on a
+ * grid of the given stride: a scanline walk, so it costs what the
+ * triangle covers and not what its bounding box does.  The outermost
+ * pixel all round is left out: along an edge two triangles share, which
+ * of them the GL gave the pixel to is a coin toss, and a ruling read off
+ * a coin toss is worse than none. */
+function rasterize(p0, p1, p2, stride, fn){
+  /* the GL samples a pixel at its centre, half a pixel in from the
+   * corner the index names; the triangle is shifted so integer points
+   * here are those centres */
+  const P=[p0,p1,p2].map(p=>[p[0]-0.5, p[1]-0.5]);
+  const yMin=Math.max(0, Math.ceil(Math.min(P[0][1],P[1][1],P[2][1]))+1);
+  const yMax=Math.floor(Math.max(P[0][1],P[1][1],P[2][1]))-1;
+  for(let y=yMin - (yMin%stride); y<=yMax; y+=stride){
+    if(y<yMin) continue;
+    let xa=Infinity, xb=-Infinity;
+    for(let k=0;k<3;k++){
+      const a=P[k], b=P[(k+1)%3];
+      if((y<a[1]) === (y<b[1])) continue;              // the row misses this edge
+      const x=a[0]+(b[0]-a[0])*(y-a[1])/(b[1]-a[1]);
+      if(x<xa) xa=x; if(x>xb) xb=x;
+    }
+    const x0=Math.ceil(xa)+1, x1=Math.floor(xb)-1;
+    if(x0>x1) continue;
+    for(let x=x0 - (x0%stride); x<=x1; x+=stride) if(x>=x0) fn(x,y);
+  }
+}
+
+/* Every mesh the view is drawing, as the tracer needs it: mirrors the
+ * loop in drawScene so the drawing shows the parts the view does, moved
+ * where the rig and the explode slider have put them. */
+function scenePieces(){
+  const out = [];
+  for(const u of rigUnits()){
+    const meshes = u.build && u.build.meshes;
+    if(!meshes) continue;
+    const kind = u.L ? u.L.spineKind : null;
+    eachDrawnMesh(meshes, (k, tris)=>{
+      if(!visible[partOf(k)]) return;
+      const z=(EXPLODE_ORDER[explodeGroupOf(k)]||0)*explode;
+      out.push({ tris, colour: colorOf(k, kind), ofs: [u.dx, u.dy, z+u.dz] });
+    });
+  }
+  return out;
+}
+
+/* The number pass: each triangle in the colour of its number. */
+let idProg = null;
+function idProgram(){
+  if(idProg) return idProg;
+  const V = `attribute vec3 aPos;attribute vec3 aId;uniform mat4 uMVP;uniform vec3 uOfs;
+varying vec3 vId;void main(){vId=aId;gl_Position=uMVP*vec4(aPos+uOfs,1.0);}`;
+  const F = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec3 vId;void main(){gl_FragColor=vec4(vId,1.0);}`;
+  const sh=(t,src)=>{const o=gl.createShader(t);gl.shaderSource(o,src);gl.compileShader(o);
+    if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;};
+  const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,V)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,F));
+  gl.linkProgram(p);
+  idProg = { p, aPos: gl.getAttribLocation(p,'aPos'), aId: gl.getAttribLocation(p,'aId'),
+             uMVP: gl.getUniformLocation(p,'uMVP'), uOfs: gl.getUniformLocation(p,'uOfs') };
+  return idProg;
+}
+
+/* Which triangle owns each pixel of a W×H frame, top-down, 0 for none.
+ * Numbers each piece's triangles from pc.id0 upward as it goes.  Drawn to
+ * a framebuffer of its own rather than the canvas, because the canvas is
+ * multisampled and a blend of two numbers is a third, wrong, number. */
+function shootIds(W, H, pieces){
+  const P = idProgram();
+  const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,W,H,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  const rb=gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER,rb);
+  gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,W,H);
+  const fb=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,rb);
+  let ids = null;
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE){
+    gl.viewport(0,0,W,H); gl.clearColor(0,0,0,0);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(P.p);
+    gl.uniformMatrix4fv(P.uMVP,false,sceneMVP(W/H).mvp);
+    let id = 1;
+    for(const pc of pieces){
+      const T = pc.tris, n = T.length/9, data = new Float32Array(n*18);
+      pc.id0 = id;
+      for(let t=0;t<n;t++,id++){
+        const r=((id>>16)&255)/255, g=((id>>8)&255)/255, b=(id&255)/255;
+        for(let v=0;v<3;v++){
+          const si=t*9+v*3, o=t*18+v*6;
+          data[o]=T[si]; data[o+1]=T[si+1]; data[o+2]=T[si+2];
+          data[o+3]=r; data[o+4]=g; data[o+5]=b;
+        }
+      }
+      const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+      gl.bufferData(gl.ARRAY_BUFFER,data,gl.STREAM_DRAW);
+      gl.enableVertexAttribArray(P.aPos); gl.vertexAttribPointer(P.aPos,3,gl.FLOAT,false,24,0);
+      gl.enableVertexAttribArray(P.aId);  gl.vertexAttribPointer(P.aId,3,gl.FLOAT,false,24,12);
+      gl.uniform3fv(P.uOfs, pc.ofs);
+      gl.drawArrays(gl.TRIANGLES,0,n*3);
+      gl.deleteBuffer(buf);
+    }
+    const px=new Uint8Array(W*H*4);
+    gl.readPixels(0,0,W,H,gl.RGBA,gl.UNSIGNED_BYTE,px);
+    ids = new Uint32Array(W*H);
+    for(let r=0;r<H;r++){
+      const y=H-1-r;
+      for(let x=0;x<W;x++){ const i=(r*W+x)*4; ids[y*W+x]=(px[i]<<16)|(px[i+1]<<8)|px[i+2]; }
+    }
+    gl.disableVertexAttribArray(P.aId);
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb); gl.deleteTexture(tex);
+  gl.useProgram(mainProg);
+  return ids;
+}
+
+/* The stretches of the screen segment p→q, as fractions [t0,t1], along
+ * which the number buffer shows one of the triangles `mine` says — or
+ * nothing at all, which is the silhouette against the air.  Sampled every
+ * EDGE_STEP px with a pixel of slack either side, since a line sits on
+ * the boundary between two triangles' pixels and lands on whichever. */
+function visibleRuns(ids, W, H, p, q, mine){
+  const len = Math.hypot(q[0]-p[0], q[1]-p[1]);
+  const n = Math.max(2, Math.min(600, Math.ceil(len/EDGE_STEP)+1));
+  const ok = new Uint8Array(n);
+  for(let k=0;k<n;k++){
+    const t=k/(n-1), x=Math.round(p[0]+(q[0]-p[0])*t), y=Math.round(p[1]+(q[1]-p[1])*t);
+    hunt: for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      const xx=x+dx, yy=y+dy;
+      if(xx<0||yy<0||xx>=W||yy>=H) continue;
+      const id=ids[yy*W+xx];
+      if(id===0||mine(id)){ ok[k]=1; break hunt; }
+    }
+  }
+  /* a gap of one or two samples is a pixel-rounding stumble, not an
+   * occluder; a run of one sample is a speck, not a line */
+  for(let k=1;k<n-1;k++) if(!ok[k]&&ok[k-1]&&(ok[k+1]||(k+2<n&&ok[k+2]))) ok[k]=1;
+  const runs=[], step=len/(n-1);
+  for(let k=0;k<n;){
+    if(!ok[k]){ k++; continue; }
+    let e=k; while(e+1<n&&ok[e+1]) e++;
+    if((e-k)*step >= 3 || (n===2 && e>k)) runs.push([k/(n-1), e/(n-1)]);
+    k=e+1;
+  }
+  return runs;
+}
+
+const svgPt = v => `${v[0].toFixed(1)} ${v[1].toFixed(1)}`;
+const hex2 = x => Math.round(Math.min(255,Math.max(0,x))).toString(16).padStart(2,'0');
+
+/* The rig as it is framed, as SVG text with its size. */
+function trace3d(W, H){
+  const pieces = scenePieces();
+  if(!pieces.length) return null;
+  const ids = shootIds(W, H, pieces);
+  if(!ids) return null;
+  let total = 0; for(const pc of pieces) total += pc.tris.length/9;
+  const seen = new Uint8Array(total+2);
+  for(let i=0;i<ids.length;i++) seen[ids[i]] = 1;
+  /* the frame the drawing occupies: the pixels the rig actually covers */
+  let bx0=W, by0=H, bx1=-1, by1=-1;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(ids[y*W+x]){
+    if(x<bx0) bx0=x; if(x>bx1) bx1=x; if(y<by0) by0=y; if(y>by1) by1=y;
+  }
+  if(bx1<0) return null;
+  const {B, mvp:m} = sceneMVP(W/H);
+  const project = (x,y,z)=>{
+    const cx=m[0]*x+m[4]*y+m[8]*z+m[12], cy=m[1]*x+m[5]*y+m[9]*z+m[13],
+          cw=m[3]*x+m[7]*y+m[11]*z+m[15];
+    return [(cx/cw+1)/2*W, (1-cy/cw)/2*H];
+  };
+  /* the shader's two lamps, and its formula, applied once per face at
+   * the face's centre instead of once per pixel */
+  const KEY=norm([0.35,-0.5,0.8]), FILL=norm([-0.5,0.6,0.2]);
+  const faces=[], edgePaths=[];
+  let nEdges = 0;
+  for(const pc of pieces){
+    const T=pc.tris, n=T.length/9, [ox,oy,oz]=pc.ofs, C=pc.colour;
+    const pts=new Array(n*3), nrm=new Array(n), facing=new Int8Array(n);
+    /* vertices shared by position, so edges can be found by the pair of
+     * vertices they join; triangles are listed against every edge, and
+     * against every vertex */
+    const vid=new Map(), vkey=new Int32Array(n*3), vpos=[], vtris=[];
+    for(let t=0;t<n;t++){
+      const i=t*9, v=[];
+      for(let k=0;k<3;k++){
+        const x=T[i+k*3]+ox, y=T[i+k*3+1]+oy, z=T[i+k*3+2]+oz;
+        v.push([x,y,z]);
+        const key=x.toFixed(3)+','+y.toFixed(3)+','+z.toFixed(3);
+        let id=vid.get(key);
+        if(id===undefined){ id=vpos.length; vid.set(key,id); vpos.push([x,y,z]); vtris.push([]); }
+        vkey[t*3+k]=id; vtris[id].push(t);
+        pts[t*3+k]=project(x,y,z);
+      }
+      const nn=norm(cross(sub(v[1],v[0]),sub(v[2],v[0])));
+      const c=mul(add(add(v[0],v[1]),v[2]),1/3);
+      const view=norm(sub(B.eye,c)), f=dot(nn,view);
+      nrm[t]=nn; facing[t]= f>=0 ? 1 : -1;
+      if(!seen[pc.id0+t]) continue;
+      const nl = f<0 ? mul(nn,-1) : nn;
+      const key=Math.max(dot(nl,KEY),0), fill=Math.max(dot(nl,FILL),0), head=Math.abs(f);
+      const lit=0.34+0.46*key+0.16*fill+0.28*head;
+      const col='#'+hex2(C[0]*lit*255)+hex2(C[1]*lit*255)+hex2(C[2]*lit*255);
+      const p0=pts[t*3], p1=pts[t*3+1], p2=pts[t*3+2];
+      faces.push({ id: pc.id0+t, depth: dot(sub(c,B.eye),B.fwd), col, p0, p1, p2,
+                   d:`M${svgPt(p0)}L${svgPt(p1)}L${svgPt(p2)}Z` });
+    }
+    /* the edges: which triangles meet along each, then which are lines */
+    const edges=new Map();
+    for(let t=0;t<n;t++) for(let k=0;k<3;k++){
+      const a=vkey[t*3+k], b=vkey[t*3+(k+1)%3];
+      const ek = a<b ? a*vpos.length+b : b*vpos.length+a;
+      let e=edges.get(ek);
+      if(!e){ e={a:Math.min(a,b), b:Math.max(a,b), tris:[]}; edges.set(ek,e); }
+      e.tris.push(t);
+    }
+    let d='';
+    for(const e of edges.values()){
+      const tr=e.tris;
+      let line = tr.length!==2;                       // a border or a junction
+      if(!line) line = facing[tr[0]]!==facing[tr[1]]  // the silhouette
+                    || dot(nrm[tr[0]],nrm[tr[1]])<EDGE_CREASE;   // a crease
+      if(!line) continue;
+      if(!tr.some(t=>seen[pc.id0+t])) continue;       // wholly out of sight
+      const pa=project(...vpos[e.a]), pb=project(...vpos[e.b]);
+      /* the triangles the line may show against: the two it lies between
+       * and the ring round them.  At a silhouette on a bevel the last
+       * strip facing the camera is nearly edge-on and leaves no pixels,
+       * so the strip before it is what the buffer shows next to the line. */
+      const near=new Set();
+      for(const t of tr) for(let k=0;k<3;k++) for(const t2 of vtris[vkey[t*3+k]]) near.add(t2);
+      const mine = id => { const t=id-pc.id0; return t>=0 && t<n && near.has(t); };
+      for(const [t0,t1] of visibleRuns(ids, W, H, pa, pb, mine)){
+        const q0=[pa[0]+(pb[0]-pa[0])*t0, pa[1]+(pb[1]-pa[1])*t0];
+        const q1=[pa[0]+(pb[0]-pa[0])*t1, pa[1]+(pb[1]-pa[1])*t1];
+        d+=`M${svgPt(q0)}L${svgPt(q1)}`; nEdges++;
+      }
+    }
+    if(d) edgePaths.push(d);
+  }
+  if(!faces.length) return null;
+  /* --- the order: rulings from the number buffer, depth for the rest --- */
+  const slot = new Int32Array(total+2).fill(-1);       // triangle number → face index
+  faces.forEach((f,i)=>{ slot[f.id]=i; });
+  const under = faces.map(()=>null);   // per face: the faces it hides, and at how many samples
+  faces.forEach((f,i)=>{
+    rasterize(f.p0, f.p1, f.p2, ORDER_STEP, (x,y)=>{
+      const w = ids[y*W+x];
+      if(w===f.id || w===0) return;
+      const j = slot[w];
+      if(j<0) return;
+      const u = under[j] || (under[j]=new Map());       // j is in front of i here
+      u.set(i, (u.get(i)||0)+1);
+    });
+  });
+  /* Two faces ruled each in front of the other — two that really pass
+   * through one another, or a depth-buffer tie between faces that touch
+   * — keep only the ruling with more samples behind it. */
+  const deps = j => {
+    const u = under[j]; if(!u) return [];
+    const out = [];
+    for(const [i,n] of u){
+      const back = under[i] && under[i].get(j);
+      if(!(back > n)) out.push(i);
+    }
+    return out;
+  };
+  /* farthest first; before any face, everything it is ruled to hide.  A
+   * longer loop of rulings is broken wherever the walk first comes back
+   * round. */
+  const byDepth = faces.map((f,i)=>i).sort((a,b)=>faces[b].depth-faces[a].depth);
+  const state = new Uint8Array(faces.length), order = [];
+  for(const root of byDepth){
+    if(state[root]) continue;
+    const stack=[[root, deps(root), 0]];
+    state[root]=1;
+    while(stack.length){
+      const top=stack[stack.length-1], d=top[1];
+      if(top[2] < d.length){
+        const j = d[top[2]++];
+        if(!state[j]){ state[j]=1; stack.push([j, deps(j), 0]); }
+      } else { order.push(top[0]); state[top[0]]=2; stack.pop(); }
+    }
+  }
+  /* neighbours in that order of one shade share a path */
+  let body='', run=null;
+  const flush=()=>{ if(run) body+=`<path fill="${run.col}" stroke="${run.col}" d="${run.d}"/>`; run=null; };
+  for(const i of order){
+    const f=faces[i];
+    if(run && run.col===f.col) run.d+=f.d;
+    else { flush(); run={col:f.col, d:f.d}; }
+  }
+  flush();
+  const x=Math.max(0, bx0-PIC_PAD), y=Math.max(0, by0-PIC_PAD);
+  const w=Math.min(W-1, bx1+PIC_PAD)-x+1, h=Math.min(H-1, by1+PIC_PAD)-y+1;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" `+
+    `xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" `+
+    `width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}">`+
+    `<title>${svgEscape(baseName())} 3D</title>`+
+    `<g inkscape:groupmode="layer" inkscape:label="Faces" id="faces" `+
+    `stroke-width="0.6" stroke-linejoin="round">${body}</g>`+
+    `<g inkscape:groupmode="layer" inkscape:label="Edges" id="edges" fill="none" `+
+    `stroke="${EDGE_COLOUR}" stroke-width="${EDGE_WIDTH}" stroke-linecap="round">`+
+    edgePaths.map(d=>`<path d="${d}"/>`).join('')+`</g></svg>`;
+  return { svg, faces: faces.length, edges: nEdges, width: w, height: h };
+}
+
+$('dl-3d-svg').onclick = ()=>{
+  const out = withPicture(trace3d);
+  if(!out) return toast('nothing to export — open a layout first');
+  download(`${baseName()}-design-3d.svg`, out.svg, 'image/svg+xml');
+  toast(`3D drawing saved — ${out.faces} faces, ${out.edges} edge lines, `+
+        `${(out.svg.length/1024).toFixed(0)} KB`);
+};
 
 /* ===================== click to inspect ===================== */
 function keyBoxes(L){
