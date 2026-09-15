@@ -1694,12 +1694,22 @@ function buildPresetOptions(){
   const info = (window.XENACHORD_PRESET_INFO && typeof window.XENACHORD_PRESET_INFO === 'object')
     ? window.XENACHORD_PRESET_INFO : {};
   presetOptions = presetNames().map(n => {
-    const notes = info[n] && info[n].n != null ? info[n].n : null;
+    let notes = info[n] && info[n].n != null ? info[n].n : null;
     /* "31 - Archicembalo" reads as "31 Archicembalo" once the count is drawn
      * in its own right, so the filename's leading count is dropped from the
-     * name rather than said twice */
-    const name = notes != null
-      ? n.replace(new RegExp('^' + notes + '\\s*[-–—]\\s*'), '') : n;
+     * name rather than said twice. "13ed3 - Gamma" tucks its tuning notation
+     * between the count and the dash, so the count can't be cleanly dropped
+     * from the name — there the bold count is dropped instead, since the
+     * name already leads with it. */
+    let name = n;
+    if (notes != null) {
+      const dashed = n.replace(new RegExp('^' + notes + '\\s*[-–—]\\s*'), '');
+      if (dashed !== n) {
+        name = dashed;
+      } else if (new RegExp('^' + notes + '(?!\\d)').test(n)) {
+        notes = null;
+      }
+    }
     return {
       value: CUSTOM_PREFIX + n,
       name,
