@@ -1306,6 +1306,19 @@
                 title="Save the layout currently displayed in Play as a PNG image">⬇︎ Save design (.png)</button>
             </div>
           </fieldset>
+
+          <!-- ---- asking for one to be built ----
+               The same share link, put into an email instead of the
+               clipboard: the mail client opens with the address, subject
+               and the link already in place, so what is being asked about
+               is the exact keyboard on the desk. -->
+          <fieldset>
+            <legend>Purchase Inquiry</legend>
+            <div class="btns">
+              <button class="primary wide" id="inquiry-email"
+                title="Opens a new email to hello@richiegreene.com with this layout's share link in it, so the keyboard you are asking about is the one on the desk.">✉︎ Email a Purchase Inquiry</button>
+            </div>
+          </fieldset>
         </div>
       </div>
     </aside>
@@ -4440,6 +4453,36 @@ $('share-file').onclick = ()=>{
 };
 
 $('share-open').onclick = ()=> $('share-input').click();
+
+/**
+ * THE SAME LINK, IN AN EMAIL.  A mailto: hands the address, subject and a
+ * body to whatever mail client the browser has; the link goes in the body
+ * so the keyboard being asked about is this one, not a description of it.
+ * The link is also copied, because some clients cap what a mailto: may
+ * carry and a long rig link can be cut short in transit — the clipboard
+ * copy is the one to paste if the email arrives without it.
+ */
+const INQUIRY_TO      = 'hello@richiegreene.com';
+const INQUIRY_SUBJECT = 'Keyboard Purchase Inquiry';
+
+$('inquiry-email').onclick = async ()=>{
+  const many = shareIsRig();
+  const link = await XShare.linkFor(many ? rig : design, many);
+  try { history.replaceState(null, '', link); } catch(e){}
+  const body =
+    `Hello,\n\n` +
+    `I'm interested in purchasing this keyboard ${shareWhat()}:\n\n` +
+    `${link}\n\n` +
+    `Thanks,\n`;
+  const href = `mailto:${INQUIRY_TO}` +
+    `?subject=${encodeURIComponent(INQUIRY_SUBJECT)}` +
+    `&body=${encodeURIComponent(body)}`;
+  const copied = await copyText(link);
+  window.location.href = href;
+  toast(copied
+    ? `email drafted to ${INQUIRY_TO} — the share link is in it, and on the clipboard in case it was cut short`
+    : `email drafted to ${INQUIRY_TO} — the share link is in it`);
+};
 $('share-input').onchange = async (e)=>{
   const f = e.target.files && e.target.files[0];
   e.target.value = '';                       // so the same file opens twice
@@ -4881,17 +4924,33 @@ const BG_DARK=[0,0,0], BG_LIGHT=[214/255,214/255,214/255];
    once per session and worked ever after, which is exactly the kind of fault
    a character-glyph toggle could hide — the glyph was written by the same
    branch that was wrong, so icon and state agreed on the wrong answer. */
-let bgLight=true;
-let bgColor=BG_LIGHT.slice();
-document.body.classList.add('bright');
+/* THE DEFAULT IS WHATEVER THE SYSTEM IS SET TO. It used to be bright, full
+   stop, which meant a phone in dark mode opened on a white viewport every
+   time. Now the OS preference decides the first frame, and keeps deciding
+   (a Mac that flips to dark at sunset takes the viewport with it) until the
+   user presses the button — from then on their choice wins for the session
+   and the OS is no longer consulted. No preference (old browsers, matchMedia
+   absent) falls back to bright, which is what it always was. */
+const sysDark=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+let bgLight=true, bgColor=BG_LIGHT.slice(), themeChosen=false;
+function setBright(light){
+  bgLight=light;
+  bgColor=(bgLight?BG_LIGHT:BG_DARK).slice();
+  document.body.classList.toggle('bright', bgLight);
+}
+setBright(!(sysDark&&sysDark.matches));
+if(sysDark) sysDark.addEventListener('change', e=>{
+  if(themeChosen) return;
+  setBright(!e.matches);
+  draw();
+});
 /* Which glyph is showing is decided in CSS off `body.bright` — see #v-theme
    above — so this only has to move the state and redraw. It used to also
    write the button's textContent, which meant the icon and the class could
    disagree if either was ever set from anywhere else. */
 $('v-theme').onclick=()=>{
-  bgLight=!bgLight;
-  bgColor=(bgLight?BG_LIGHT:BG_DARK).slice();
-  document.body.classList.toggle('bright', bgLight);
+  themeChosen=true;
+  setBright(!bgLight);
   draw();
 };
 
