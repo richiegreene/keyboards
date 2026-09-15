@@ -100,7 +100,20 @@ function main() {
     if (got.info) info[name] = got.info;
   }
 
-  const names = Object.keys(presets).sort((a, b) => a.localeCompare(b));
+  /* Sort by the leading number ("9 - Antidiatonic", "13ed3 - Gamma") rather
+   * than plain string order, so e.g. "9 - Antidiatonic" sorts before
+   * "10 - Mosh" instead of after "36 - Archicembalo", and "13ed3 - Gamma"
+   * sorts with the other 13s despite the "ed3" between the number and the
+   * dash. Falls back to string order for ties or names with no leading
+   * number. Keep this in sync with index.html's presetNames(). */
+  const leadingNumber = (n) => { const m = /^(\d+)/.exec(n); return m ? +m[1] : null; };
+  const names = Object.keys(presets).sort((a, b) => {
+    const na = leadingNumber(a), nb = leadingNumber(b);
+    if (na != null && nb != null && na !== nb) return na - nb;
+    if (na != null && nb == null) return -1;
+    if (na == null && nb != null) return 1;
+    return a.localeCompare(b);
+  });
   const head = `/* =====================================================================
  *  SHARED PRESETS — the layouts this app itself carries
  * =====================================================================

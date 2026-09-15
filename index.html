@@ -1630,7 +1630,20 @@ function allPresets(){
   const p = window.XENACHORD_PRESETS;
   return (p && typeof p === 'object') ? p : {};
 }
-const presetNames = () => Object.keys(allPresets()).sort((a,b)=>a.localeCompare(b));
+/* Presets lead with a note count ("9 - Antidiatonic", "13ed3 - Gamma") but
+ * that count isn't always followed by a plain dash — "13ed3" tucks the "ed3"
+ * tuning notation between the number and the name — so a plain string sort
+ * puts "9 - Antidiatonic" after "36 - Archicembalo". Sort by the leading
+ * number instead, falling back to string order for ties or presets with no
+ * leading number. */
+const leadingNumber = (n) => { const m = /^(\d+)/.exec(n); return m ? +m[1] : null; };
+const presetNames = () => Object.keys(allPresets()).sort((a,b) => {
+  const na = leadingNumber(a), nb = leadingNumber(b);
+  if (na != null && nb != null && na !== nb) return na - nb;
+  if (na != null && nb == null) return -1;
+  if (na == null && nb != null) return 1;
+  return a.localeCompare(b);
+});
 
 /* A PRESET SAYS MORE THAN ITS NAME.  Beside the name that its filename gives
  * it, a preset may carry a note count and a sentence of history — where the
