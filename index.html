@@ -106,13 +106,55 @@
   /* ---------- options bar, below the strip ---------- */
   #viewbar2{display:flex;align-items:center;flex-wrap:wrap;
     gap:12px;background:var(--panel);border-top:1px solid var(--line);
-    padding:7px 11px;font-size:11px}
+    padding:7px 40px 7px 11px;font-size:11px;position:relative}
   #viewbar2 .grp{display:flex;align-items:center;gap:7px}
   #viewbar2 .sep{width:1px;height:20px;background:var(--line)}
   .vis{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;color:var(--dim)}
   .vis input{accent-color:var(--accent);margin:0}
-  .vis .dot{width:9px;height:9px;border-radius:2px;border:1px solid rgba(0,0,0,.5)}
   .vis.on{color:var(--text)}
+  /* ---- the bar's own switches ----
+     The same segmented idiom as the drawer's Devices control (.seg), so a
+     setting under the keyboard reads like a setting beside it.  Two kinds
+     live here: a set of SWITCHES, each on or off on its own (which parts
+     are drawn), and a CHOICE, one of which is on (what a key is labelled).
+     They look the same because the gesture is the same: press the one you
+     mean. */
+  #viewbar2 .seg{margin:0;flex-wrap:nowrap}
+  #viewbar2 .seg button{flex:0 0 auto;height:22px;padding:0 8px;line-height:1;
+    color:var(--dim);display:flex;align-items:center;gap:5px}
+  #viewbar2 .seg button.on{color:var(--text)}
+  #viewbar2 .seg button:disabled{cursor:default;opacity:.55}
+  #viewbar2 .seg button:disabled:hover{border-color:var(--line);color:var(--dim)}
+  /* A key colour needs no word: the button IS the swatch.  On, it is filled
+     edge to edge with the filament it stands for; off, the colour shrinks to
+     a tint inside it, so what is hidden is still named. */
+  #viewbar2 .seg button.sw{width:28px;padding:0;position:relative;
+    --sw:var(--kw)}
+  #viewbar2 .seg button.sw::before{content:"";position:absolute;inset:4px 5px;
+    border-radius:2px;background:var(--sw);opacity:.3;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+  #viewbar2 .seg button.sw.on{background:var(--sw)}
+  #viewbar2 .seg button.sw.on::before{display:none}
+  /* Spine and press are more than one filament, so they keep their words
+     and carry a swatch per band beside them. */
+  .dot{width:9px;height:9px;border-radius:50%;border:1px solid rgba(0,0,0,.5);
+    display:inline-block;flex:0 0 auto}
+  .dot+.dot{margin-left:-3px}
+  #viewbar2 .seg button:not(.on) .dot{opacity:.4}
+  /* ---- shutting the settings, keeping the keys ----
+     The strip handle shuts the whole editor.  This shuts only the row of
+     display settings under it: the bar folds to a sliver holding one
+     chevron, and the keyboard stays where it is. */
+  #optsHandle{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    width:24px;height:22px;padding:0;border:0;
+    background:transparent;color:var(--dim);border-radius:4px;
+    display:flex;align-items:center;justify-content:center}
+  #optsHandle:hover{color:var(--text);background:var(--panel2)}
+  #optsHandle svg{width:12px;height:12px;transition:transform .15s}
+  body.opts-collapsed #viewbar2{padding:0;height:14px;gap:0}
+  body.opts-collapsed #viewbar2>:not(#optsHandle){display:none}
+  body.opts-collapsed #optsHandle{height:14px;border-radius:0}
+  body.opts-collapsed #optsHandle svg{transform:rotate(180deg)}
   #explode{width:104px;accent-color:var(--accent)}
   #inspect{position:absolute;right:12px;bottom:12px;width:268px;
     background:rgba(30,31,37,.92);backdrop-filter:blur(4px);
@@ -401,6 +443,12 @@
   body.mode-export .kb-white .nm,
   body.mode-play .kb-m .nm,
   body.mode-export .kb-m .nm{display:none}
+  /* ...unless Design is asked for the names — the labels switch on the
+     options bar — in which case it shows what Play would, so a keyboard can
+     be arranged with its notation in view.  Still one question at a time. */
+  body.labels-names:not(.mode-play):not(.mode-export) .kb-tune{display:flex}
+  body.labels-names:not(.mode-play):not(.mode-export) .kb-white .nm,
+  body.labels-names:not(.mode-play):not(.mode-export) .kb-m .nm{display:none}
   /* ---------- the gesture belongs to the keyboard ----------
      Holding and dragging across keys is how the 3D view is played (#gl is
      touch-action:none for the same reason); the strip needs the same so a
@@ -1298,24 +1346,39 @@
       </div>
     </div>
     <div id="viewbar2">
-      <div class="grp" id="visgrp"></div>
+      <div class="seg" id="visgrp"></div>
       <div class="sep"></div>
       <!-- ---- the air between two devices, taken out ----
            Only ever offered when there is a side-by-side pair to close up:
            stacking is separated up the Z axis, and one keyboard has nothing
            to be flush with. -->
-      <div class="grp" id="flushgrp" style="display:none">
-        <label class="vis" id="flushlab"
-          title="Closes the 20mm gap between side-by-side devices to 1.5mm — the same spacing as adjacent white keys — so the pair reads as one keybed. Still two separate AKM320s and spines.">
-          <input type="checkbox" id="flush">flush</label>
+      <div class="seg" id="flushgrp" style="display:none">
+        <button id="flush" aria-pressed="false"
+          title="Closes the 20mm gap between side-by-side devices to 1.5mm — the same spacing as adjacent white keys — so the pair reads as one keybed. Still two separate AKM320s and spines.">flush</button>
       </div>
       <div class="sep" id="flushsep" style="display:none"></div>
+      <!-- ---- what a key is labelled with ----
+           Design numbers the keys, Play names the notes; this lets Design
+           borrow Play's names, so a layout can be arranged with its notation
+           in view.  Play and Export always show names, and say so here. -->
+      <div class="seg" id="labelseg">
+        <button data-v="numbers" class="on" aria-pressed="true"
+          title="Each key's position in the arrangement, 0 upward — what the palette and the widths are counted in.">numbers</button>
+        <button data-v="names" aria-pressed="false"
+          title="Each key's note, in the notation the Play drawer has chosen — the label Play shows.">names</button>
+      </div>
       <div class="grp"><label for="labelsize" style="margin:0;color:var(--dim)">label sizing</label>
         <input id="labelsize" type="range" min="50" max="200" step="1" value="100">
         <span id="labelsizeval" style="color:var(--dim);width:34px">100%</span></div>
       <div class="grp"><span style="color:var(--dim)">separate combs</span>
         <input id="explode" type="range" min="0" max="60" step="1" value="0">
         <span id="explodeval" style="color:var(--dim);width:34px">0 mm</span></div>
+      <button id="optsHandle" title="hide the display settings">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2.5 4.5L6 8l3.5-3.5" />
+        </svg>
+      </button>
     </div>
   </div>
   </div>
@@ -4597,39 +4660,50 @@ function makeBufs(meshes){
   return buffers;
 }
 
-/* ---- visibility toggles ---- */
+/* ---- visibility toggles ----
+ * One segmented row, one button per part, each a switch of its own: the
+ * three key colours are wordless swatches filled with their filament, and
+ * spine and press keep a word because each is more than one colour. */
 function buildVisToggles(){
   const g=$('visgrp'); g.innerHTML='';
   for(const k of ['white','black','gray','spine','press']){
-    const lab=document.createElement('label');
-    lab.className='vis'+(visible[k]?' on':'');
+    const b=document.createElement('button');
+    b.className=(visible[k]?'on':'');
+    b.setAttribute('aria-pressed', String(visible[k]));
     const rgb=c=>'rgb('+c.map(v=>Math.round(v*255)).join(',')+')';
-    let dots, label=PART_LABEL[k];
-    if(k==='spine' && L){
+    if(k==='spine'){
       /* one swatch per band of the drafted spine this design uses */
-      const layers=XM.SPINE.layers[L.spineKind].A.map(l=>l.name);
-      dots=layers.map(n=>`<span class="dot" title="${L.spineKind} type spine, `+
-        `${n} layer" style="background:${rgb(XM.spineLayerColor(L.spineKind,n))}`+
-        `;margin-right:1px"></span>`).join('');
-      label=`spine (${L.spineKind})`;
-    } else if(k==='press' && L){
+      const kind = L ? L.spineKind : 'three';
+      const layers=XM.SPINE.layers[kind].A.map(l=>l.name);
+      b.innerHTML=layers.map(n=>`<span class="dot" title="${kind} type spine, `+
+        `${n} layer" style="background:${rgb(XM.spineLayerColor(kind,n))}">`+
+        `</span>`).join('')+`<span>spine (${kind})</span>`;
+      b.title=`show or hide the spine — the ${kind}-type band the keys' tongues plug into`;
+    } else if(k==='press'){
       /* one swatch per key colour this design presses in — a press is
          printed as part of its key, in its key's filament */
-      dots=L.spineColours.map(n=>`<span class="dot" title="sensor press, `+
-        `${n} filament" style="background:${rgb(COLORS[n])};margin-right:1px">`+
-        `</span>`).join('');
+      const cols = L ? L.spineColours : ['white','black','gray'];
+      b.innerHTML=cols.map(n=>`<span class="dot" title="sensor press, `+
+        `${n} filament" style="background:${rgb(COLORS[n])}"></span>`).join('')+
+        `<span>${PART_LABEL[k]}</span>`;
+      b.title =
+        'Show or hide the sensor presses. One watertight solid per key: the '+
+        'drafted sensor pad lofted up to the pair face in that key\'s underside '+
+        'deck, capped both ends, with the dome window left open. It prints in '+
+        'its key\'s filament, so the .stl for a colour carries its presses.';
     } else {
-      dots=`<span class="dot" style="background:${rgb(COLORS[k])}"></span>`;
+      b.classList.add('sw');
+      b.style.setProperty('--sw', rgb(COLORS[k]));
+      b.title=`show or hide the ${k} keys`;
+      b.setAttribute('aria-label', `${k} keys`);
     }
-    lab.innerHTML=`<input type="checkbox" ${visible[k]?'checked':''}>`+dots+label;
-    if(k==='press') lab.title =
-      'One watertight solid per key: the drafted sensor pad lofted up to the '+
-      'pair face in that key\'s underside deck, capped both ends, with the '+
-      'dome window left open. It prints in its key\'s filament, so the .stl '+
-      'for a colour carries its presses.';
-    lab.querySelector('input').onchange=e=>{
-      visible[k]=e.target.checked; lab.classList.toggle('on',visible[k]); draw(); };
-    g.appendChild(lab);
+    b.onclick=()=>{
+      visible[k]=!visible[k];
+      b.classList.toggle('on',visible[k]);
+      b.setAttribute('aria-pressed', String(visible[k]));
+      draw();
+    };
+    g.appendChild(b);
   }
 }
 /* Only the X gap moves, and no geometry does — so the two displays are laid
@@ -4643,9 +4717,10 @@ function relayoutRig(){
   draw();
 }
 
-$('flush').onchange = e => {
-  flush = e.target.checked;
-  $('flushlab').classList.toggle('on', flush);
+$('flush').onclick = () => {
+  flush = !flush;
+  $('flush').classList.toggle('on', flush);
+  $('flush').setAttribute('aria-pressed', String(flush));
   relayoutRig();
 };
 
@@ -5301,6 +5376,41 @@ function openDrawer(name){
   panelEl.classList.toggle('open', !!name);
 }
 
+/* ===================== what a key is labelled with =====================
+ * Design numbers the keys and Play names the notes — see .kb-tune in the
+ * stylesheet.  This lets Design show the names instead, so a layout can be
+ * arranged with its notation in view.  It is Design's choice only: Play and
+ * Export are ABOUT the names, so there the switch stands at "names" and
+ * cannot be moved, and the choice is kept for Design's return. */
+const LABELS_LS = 'xenachord-labels';
+let labelMode = 'numbers';
+function applyLabelMode(){
+  const b = document.body;
+  const forced = b.classList.contains('mode-play') || b.classList.contains('mode-export');
+  const shown = forced ? 'names' : labelMode;
+  b.classList.toggle('labels-names', labelMode === 'names');
+  for (const btn of $('labelseg').querySelectorAll('button')){
+    const on = btn.dataset.v === shown;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.disabled = forced;
+  }
+  $('labelseg').title = forced ? 'Play and Export always label the keys with their notes' : '';
+  /* Whichever label has just been shown was not measured while it was
+   * hidden, so it is fitted to its key now. */
+  applyLabelSizing();
+}
+function setLabelMode(mode){
+  labelMode = mode === 'names' ? 'names' : 'numbers';
+  try{ localStorage.setItem(LABELS_LS, labelMode); }catch(e){}
+  applyLabelMode();
+}
+for (const btn of $('labelseg').querySelectorAll('button'))
+  btn.onclick = () => setLabelMode(btn.dataset.v);
+/* The remembered choice is read here, but not applied yet: the strip is not
+ * built until rebuild() runs, and the first setMode() below applies it. */
+labelMode = localStorage.getItem(LABELS_LS) === 'names' ? 'names' : 'numbers';
+
 /* WHICH MODE YOU ARE IN IS NOT WHETHER THE DRAWER IS OPEN.
  * Collapsing the rail gives the viewport its width back; it does not put you
  * back in Design. So the mode is set by the button you last pressed and
@@ -5320,6 +5430,8 @@ function setMode(name){
    * question the mode answers — and the rotate hint is Play's alone. */
   fitStripHeight();
   showRotateHint();
+  /* The label switch reads the mode: Play and Export pin it at names. */
+  if (typeof applyLabelMode === 'function' && $('labelseg')) applyLabelMode();
 }
 
 for(const btn of railPane.querySelectorAll('.rail-btn[data-drawer]')){
@@ -5370,6 +5482,23 @@ $('stripHandle').onclick = (e) => {
   setStripCollapsed(!document.body.classList.contains('strip-collapsed'));
 };
 setStripCollapsed(localStorage.getItem(STRIP_LS) === '1');
+
+/* ===================== options bar collapse =====================
+ * The strip handle takes the whole editor away.  This takes only the row of
+ * display settings under the keys: the bar folds to a sliver with one
+ * chevron in it, the keyboard stays, and the settings are one tap back.
+ * Remembered the same way the strip is. */
+const OPTS_LS = 'xenachord-opts-collapsed';
+function setOptsCollapsed(on){
+  document.body.classList.toggle('opts-collapsed', on);
+  $('optsHandle').title = on ? 'show the display settings'
+                             : 'hide the display settings';
+  $('optsHandle').setAttribute('aria-expanded', String(!on));
+  try{ localStorage.setItem(OPTS_LS, on ? '1' : '0'); }catch(e){}
+}
+$('optsHandle').onclick = () =>
+  setOptsCollapsed(!document.body.classList.contains('opts-collapsed'));
+setOptsCollapsed(localStorage.getItem(OPTS_LS) === '1');
 
 /* ===================== phone: keyboard or model =====================
  * Two views of one instrument, and on a phone only ever one of them at a

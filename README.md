@@ -366,10 +366,17 @@ View presets: `iso`, `top`, `bottom`, `front`, `back`, `left`, `right`,
 `under-iso`. The readout at the top-left shows azimuth, elevation and distance,
 and says so when you are below the instrument.
 
-**Layer visibility** — the checkboxes at the bottom of the viewer switch the
-white / black / gray combs, the spine and the feet on and off independently.
-Hiding the whites is the quickest way to see how the accidental stems sit over
-their sensor feet.
+**Layer visibility** — the row of buttons at the bottom of the viewer switches
+the white / black / gray combs (each a swatch filled with its filament), the
+spine and the sensor presses on and off independently. Hiding the whites is the
+quickest way to see how the accidental stems sit over their sensor feet.
+
+**Key labels** — `numbers` / `names` beside it chooses what Design writes on
+each key: its position in the arrangement (0 upward) or the note name in the
+Play drawer's notation, so a layout can be arranged with its notation in view.
+Play and Export always show names. The chevron at the right end of the row
+folds these display settings away and leaves the keyboard standing; the grip
+above the row still hides the whole editor.
 
 **Separate combs** — the slider lifts each comb apart along Z in assembly order
 (feet, spine, gray, black, white), so you can see the three-layer stack the way
