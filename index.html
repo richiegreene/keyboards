@@ -1320,7 +1320,7 @@
               <button id="dl-png"
                 title="Save the layout currently displayed in Play as a PNG image">⬇︎ 2D design (.png)</button>
               <button id="dl-3d-svg"
-                title="Save the 3D view as a vector drawing — the keyboard from the angle it is shown at, fitted to size, with no ground. Two Inkscape layers: the shaded faces, and the edge lines over them.">⬇︎ 3D design (.svg)</button>
+                title="Save the 3D view as a vector drawing — the keyboard from the angle it is shown at, fitted to size, with no ground. Inkscape layers: the shaded faces, and over them the edges as line-art strokes, contours and creases each in a sub-layer of their own so they can be inked apart.">⬇︎ 3D design (.svg)</button>
               <button id="dl-3d-png"
                 title="Save the 3D view as a picture — the keyboard from the angle it is shown at, fitted to size, on a transparent ground.">⬇︎ 3D design (.png)</button>
             </div>
@@ -5488,19 +5488,50 @@ $('dl-3d-png').onclick = ()=>{
  * there and must be drawn later — a set of rulings the triangles are
  * then sorted by, farthest first among the unruled.
  *
- * AN EDGE IS A CREASE OR A SILHOUETTE.  Of the edges between triangles,
- * only two kinds are lines: where the surface bends sharply, and where it
+ * AN EDGE IS A CREASE OR A CONTOUR.  Of the edges between triangles, only
+ * two kinds are lines: where the surface bends sharply, and where it
  * turns away from the camera.  A rounded bevel is eight shallow strips,
- * so its outline is the silhouette and not the creases.  Each line is
- * then walked through the same number buffer, and the stretches that
- * pass behind something else are cut out, so a key in front of a spine
- * band leaves no ghost of the band's edge across itself.
+ * so its outline is the contour and not the creases.  The two are kept
+ * apart all the way to the file, because a drawing inks them apart: the
+ * outline heavier, the folds within it lighter.
+ *
+ * A LINE IS IN VIEW WHERE NOTHING STANDS NEARER.  Each line is walked
+ * through the number buffer, and at every step the triangle the buffer
+ * names there is asked how deep its plane is at that point of the line.
+ * Level with the line or deeper, and the line is in view; nearer, and
+ * something is in front of it.  The plane is asked and not the pixel,
+ * so that a face which merely shares the line — the other side of a
+ * crease, the next strip of a bevel, a press sitting flush on its key —
+ * is level with it to the last decimal, while a tongue a fraction of a
+ * millimetre under the spine's skin is under it.  (The earlier test,
+ * which took any triangle touching the line for the line's own surface,
+ * let a key's top vouch for the hidden tongue beneath it, and drew that
+ * tongue in dashes wherever one particular top triangle lay.)  A contour
+ * is asked one pixel outside itself, since inside it the surface it
+ * belongs to is curving up towards the eye and would pass for something
+ * in front.
+ *
+ * AND THEN IT IS INKED AS A STROKE.  The walk yields a heap of short
+ * visible stretches, one per triangle edge, and a heap is not a drawing:
+ * a key's edge is one line, not thirty butted segments with a knot of
+ * round caps at every joint.  So stretches that meet at a vertex are
+ * chained end to end — straight on through a junction, where the least
+ * turn is taken — into strokes; each stroke is thinned to the points that
+ * shape it; and a stroke too short to be a line is dropped as a speck.
+ * The result is what a grease-pencil line-art pass gives: one editable
+ * path per stroke, clean when scaled.
  */
-const EDGE_CREASE = Math.cos(30*Math.PI/180);  // bends sharper than 30° are lines
-const EDGE_STEP   = 3;                          // px between visibility samples
-const EDGE_WIDTH  = 2;                          // px, at the picture's own scale
-const EDGE_COLOUR = '#1a1a1a';
-const ORDER_STEP  = 2;                          // px between ordering samples
+const EDGE_CREASE   = Math.cos(30*Math.PI/180); // bends sharper than 30° are lines
+const EDGE_STEP     = 2;      // px between visibility samples along a line
+const EDGE_TOL      = 0.2;    // mm a surface may stand proud of a line and still not hide it
+const EDGE_OUT      = 1.0;    // px outside itself a contour is sampled
+const EDGE_MIN      = 6;      // px: a stroke shorter than this is a speck
+const EDGE_TURN     = Math.cos(70*Math.PI/180); // a stroke runs on through a junction turning less
+const EDGE_FIT      = 0.35;   // px a stroke may be straightened by
+const CONTOUR_WIDTH = 2.4;    // px, at the picture's own scale: the outline
+const CREASE_WIDTH  = 1.5;    //                                 the folds within it
+const EDGE_COLOUR   = '#1a1a1a';
+const ORDER_STEP    = 2;      // px between ordering samples
 
 /* Calls fn(x,y) for the pixel centres inside the screen triangle, on a
  * grid of the given stride: a scanline walk, so it costs what the
@@ -5629,35 +5660,122 @@ function shootIds(W, H, pieces){
 }
 
 /* The stretches of the screen segment p→q, as fractions [t0,t1], along
- * which the number buffer shows one of the triangles `mine` says — or
- * nothing at all, which is the silhouette against the air.  Sampled every
- * EDGE_STEP px with a pixel of slack either side, since a line sits on
- * the boundary between two triangles' pixels and lands on whichever. */
-function visibleRuns(ids, W, H, p, q, mine){
+ * which nothing in the number buffer stands nearer than the line.  `zt`
+ * is the line's NDC depth at p and at q with the line brought EDGE_TOL
+ * nearer the eye — a threshold rather than the depth itself, so a face
+ * level with the line clears it; NDC depth is affine along a screen
+ * segment, so between the ends it is a lerp.  `off` is where to look,
+ * in px from the line: on it, or a step outside it for a contour.
+ * `own` are the line's two triangles, which vouch for it without being
+ * asked; `deeper(id,x,y,z)` asks any other whether its plane at (x,y) is
+ * at z or beyond.  Sampled every EDGE_STEP px. */
+function visibleRuns(ids, W, H, p, q, zt, off, own, deeper){
   const len = Math.hypot(q[0]-p[0], q[1]-p[1]);
-  const n = Math.max(2, Math.min(600, Math.ceil(len/EDGE_STEP)+1));
+  const n = Math.max(2, Math.min(1200, Math.ceil(len/EDGE_STEP)+1));
   const ok = new Uint8Array(n);
   for(let k=0;k<n;k++){
-    const t=k/(n-1), x=Math.round(p[0]+(q[0]-p[0])*t), y=Math.round(p[1]+(q[1]-p[1])*t);
-    hunt: for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-      const xx=x+dx, yy=y+dy;
-      if(xx<0||yy<0||xx>=W||yy>=H) continue;
-      const id=ids[yy*W+xx];
-      if(id===0||mine(id)){ ok[k]=1; break hunt; }
-    }
+    const t=k/(n-1), sx=p[0]+(q[0]-p[0])*t, sy=p[1]+(q[1]-p[1])*t;
+    /* the pixel the point falls in: pixel x spans [x, x+1) */
+    const x=Math.floor(sx+off[0]), y=Math.floor(sy+off[1]);
+    if(x<0||y<0||x>=W||y>=H){ ok[k]=1; continue; }
+    const id=ids[y*W+x];
+    if(id===0||id===own[0]||id===own[1]){ ok[k]=1; continue; }
+    ok[k] = deeper(id, sx, sy, zt[0]+(zt[1]-zt[0])*t) ? 1 : 0;
   }
   /* a gap of one or two samples is a pixel-rounding stumble, not an
-   * occluder; a run of one sample is a speck, not a line */
+   * occluder, and so is a missed sample at either end: the ends are the
+   * vertices the stroke is chained by, and a stroke that stops two pixels
+   * short of its corner is a stroke with a notch in it */
   for(let k=1;k<n-1;k++) if(!ok[k]&&ok[k-1]&&(ok[k+1]||(k+2<n&&ok[k+2]))) ok[k]=1;
+  if(n>2 && !ok[0] && ok[1]) ok[0]=1;
+  if(n>2 && !ok[n-1] && ok[n-2]) ok[n-1]=1;
   const runs=[], step=len/(n-1);
   for(let k=0;k<n;){
     if(!ok[k]){ k++; continue; }
     let e=k; while(e+1<n&&ok[e+1]) e++;
-    if((e-k)*step >= 3 || (n===2 && e>k)) runs.push([k/(n-1), e/(n-1)]);
+    if((e-k)*step >= EDGE_STEP || (n===2 && e>k)) runs.push([k/(n-1), e/(n-1)]);
     k=e+1;
   }
   return runs;
 }
+
+/* Stretches into strokes.  A stretch is { a, b, p, q }: the nodes it
+ * joins and where they are on the page.  A node is a mesh vertex where
+ * the stretch reaches one, and a node of its own where it was cut off by
+ * something in front.  A stroke leaves a node by the stretch that turns
+ * least from the way it came, and only if that turn is under EDGE_TURN —
+ * a T is a T, and a stroke arriving along the bar does not swerve up the
+ * stem.  Strokes are started from the loose ends, so that a line begins
+ * where it begins; what is left by then is loops, started anywhere and
+ * grown both ways. */
+function chainStrokes(runs){
+  const adj=new Map();
+  runs.forEach((r,i)=>{
+    (adj.get(r.a)||adj.set(r.a,[]).get(r.a)).push(i);
+    (adj.get(r.b)||adj.set(r.b,[]).get(r.b)).push(i);
+  });
+  const used=new Uint8Array(runs.length);
+  /* the points a stroke goes on to from node `nd`, having arrived along (dx,dy) */
+  const extend=(nd,dx,dy)=>{
+    const pts=[];
+    for(;;){
+      let best=-1, bestCos=EDGE_TURN, bp=null, bn=0, bx=0, by=0;
+      const dl=Math.hypot(dx,dy)||1;
+      for(const j of adj.get(nd)){
+        if(used[j]) continue;
+        const s=runs[j], out = s.a===nd, sFrom = out ? s.p : s.q, sTo = out ? s.q : s.p;
+        const ex=sTo[0]-sFrom[0], ey=sTo[1]-sFrom[1], el=Math.hypot(ex,ey)||1;
+        const c=(dx*ex+dy*ey)/(dl*el);
+        if(c>bestCos){ bestCos=c; best=j; bp=sTo; bn=out ? s.b : s.a; bx=ex; by=ey; }
+      }
+      if(best<0) return pts;
+      used[best]=1; pts.push(bp); nd=bn; dx=bx; dy=by;
+    }
+  };
+  const strokes=[];
+  const start=(i, fromA)=>{
+    const r=runs[i]; used[i]=1;
+    const p0 = fromA ? r.p : r.q, p1 = fromA ? r.q : r.p, n0 = fromA ? r.a : r.b, n1 = fromA ? r.b : r.a;
+    const dx=p1[0]-p0[0], dy=p1[1]-p0[1];
+    const on=extend(n1,dx,dy), back=extend(n0,-dx,-dy).reverse();
+    strokes.push(back.concat([p0,p1],on));
+  };
+  const deg = nd => adj.get(nd).length;
+  for(let i=0;i<runs.length;i++){
+    if(used[i]) continue;
+    const r=runs[i];
+    if(deg(r.a)===1) start(i,true); else if(deg(r.b)===1) start(i,false);
+  }
+  for(let i=0;i<runs.length;i++) if(!used[i]) start(i,true);
+  return strokes;
+}
+
+/* A stroke thinned to the points that shape it (Douglas–Peucker, to
+ * within `tol` px): a key's straight edge, which the mesh divides into
+ * many vertices, becomes the two points it is. */
+function straighten(pts, tol){
+  if(pts.length<3) return pts;
+  const keep=new Uint8Array(pts.length); keep[0]=keep[pts.length-1]=1;
+  const stack=[[0,pts.length-1]];
+  while(stack.length){
+    const [i,j]=stack.pop();
+    const ax=pts[i][0], ay=pts[i][1], bx=pts[j][0]-ax, by=pts[j][1]-ay, bl=bx*bx+by*by;
+    let far=-1, fd=tol*tol;
+    for(let k=i+1;k<j;k++){
+      const px=pts[k][0]-ax, py=pts[k][1]-ay;
+      const u = bl ? Math.max(0,Math.min(1,(px*bx+py*by)/bl)) : 0;
+      const dx=px-u*bx, dy=py-u*by, d=dx*dx+dy*dy;
+      if(d>fd){ fd=d; far=k; }
+    }
+    if(far>=0){ keep[far]=1; stack.push([i,far],[far,j]); }
+  }
+  return pts.filter((_,k)=>keep[k]);
+}
+const strokeLength = pts => {
+  let l=0;
+  for(let k=1;k<pts.length;k++) l+=Math.hypot(pts[k][0]-pts[k-1][0], pts[k][1]-pts[k-1][1]);
+  return l;
+};
 
 const svgPt = v => `${v[0].toFixed(1)} ${v[1].toFixed(1)}`;
 const hex2 = x => Math.round(Math.min(255,Math.max(0,x))).toString(16).padStart(2,'0');
@@ -5678,79 +5796,158 @@ function trace3d(W, H){
   }
   if(bx1<0) return null;
   const {B, mvp:m} = sceneMVP(W/H);
+  /* a point on the page, with the NDC depth the number pass was settled
+   * by — which, for a plane, is affine across the page */
   const project = (x,y,z)=>{
     const cx=m[0]*x+m[4]*y+m[8]*z+m[12], cy=m[1]*x+m[5]*y+m[9]*z+m[13],
-          cw=m[3]*x+m[7]*y+m[11]*z+m[15];
-    return [(cx/cw+1)/2*W, (1-cy/cw)/2*H];
+          cz=m[2]*x+m[6]*y+m[10]*z+m[14], cw=m[3]*x+m[7]*y+m[11]*z+m[15];
+    return [(cx/cw+1)/2*W, (1-cy/cw)/2*H, cz/cw];
+  };
+  const nearer = mul(B.fwd, -EDGE_TOL);   // the step that brings a point EDGE_TOL nearer the eye
+  /* every triangle's corners on the page, by number, for the depth
+   * question; the plane z = ax+by+c through them is fitted the first
+   * time that triangle is asked */
+  const scr = new Float64Array((total+2)*9), pl = new Float64Array((total+2)*3);
+  const fit = new Int8Array(total+2);
+  const deeper = (id, x, y, z) => {
+    if(!fit[id]){
+      const o=id*9, x0=scr[o], y0=scr[o+1], z0=scr[o+2];
+      const x1=scr[o+3]-x0, y1=scr[o+4]-y0, z1=scr[o+5]-z0;
+      const x2=scr[o+6]-x0, y2=scr[o+7]-y0, z2=scr[o+8]-z0;
+      const d=x1*y2-x2*y1;
+      if(Math.abs(d)<1e-6) fit[id]=-1;   // edge-on: covers nothing, so hides nothing
+      else {
+        const a=(z1*y2-z2*y1)/d, b=(x1*z2-x2*z1)/d;
+        pl[id*3]=a; pl[id*3+1]=b; pl[id*3+2]=z0-a*x0-b*y0; fit[id]=1;
+      }
+    }
+    return fit[id]<0 || pl[id*3]*x+pl[id*3+1]*y+pl[id*3+2] >= z;
   };
   /* the shader's two lamps, and its formula, applied once per face at
    * the face's centre instead of once per pixel */
   const KEY=norm([0.35,-0.5,0.8]), FILL=norm([-0.5,0.6,0.2]);
-  const faces=[], edgePaths=[];
-  let nEdges = 0;
+  const faces=[], runs={ contour:[], crease:[] };
+  /* stroke nodes: a mesh vertex is numbered on from the pieces before it,
+   * a cut end gets a negative number of its own */
+  let nodeBase=0, cutEnd=0;
+  /* Every piece is projected before any edge is walked: a line of the
+   * first piece is tested against whatever the buffer shows under it,
+   * which may be a triangle of the last, and that triangle's plane is
+   * fitted from its corners on the page — which must be there to fit. */
+  const welded=[];
   for(const pc of pieces){
     const T=pc.tris, n=T.length/9, [ox,oy,oz]=pc.ofs, C=pc.colour;
-    const pts=new Array(n*3), nrm=new Array(n), facing=new Int8Array(n);
+    const pts=new Array(n*3), nrm=new Array(n), flat=new Uint8Array(n);
     /* vertices shared by position, so edges can be found by the pair of
-     * vertices they join; triangles are listed against every edge, and
-     * against every vertex */
-    const vid=new Map(), vkey=new Int32Array(n*3), vpos=[], vtris=[];
+     * vertices they join, and triangles listed against every edge */
+    const vid=new Map(), vkey=new Int32Array(n*3), vpos=[];
     for(let t=0;t<n;t++){
-      const i=t*9, v=[];
+      const i=t*9, v=[], id=pc.id0+t;
       for(let k=0;k<3;k++){
         const x=T[i+k*3]+ox, y=T[i+k*3+1]+oy, z=T[i+k*3+2]+oz;
         v.push([x,y,z]);
         const key=x.toFixed(3)+','+y.toFixed(3)+','+z.toFixed(3);
-        let id=vid.get(key);
-        if(id===undefined){ id=vpos.length; vid.set(key,id); vpos.push([x,y,z]); vtris.push([]); }
-        vkey[t*3+k]=id; vtris[id].push(t);
-        pts[t*3+k]=project(x,y,z);
+        let vi=vid.get(key);
+        if(vi===undefined){ vi=vpos.length; vid.set(key,vi); vpos.push([x,y,z]); }
+        vkey[t*3+k]=vi;
+        const p=pts[t*3+k]=project(x,y,z);
+        scr[id*9+k*3]=p[0]; scr[id*9+k*3+1]=p[1]; scr[id*9+k*3+2]=p[2];
       }
-      const nn=norm(cross(sub(v[1],v[0]),sub(v[2],v[0])));
+      const cr=cross(sub(v[1],v[0]),sub(v[2],v[0]));
+      /* a triangle with no area has no normal and faces no way: a seam
+       * in a press mesh, and no edge of it is a line */
+      if(Math.hypot(cr[0],cr[1],cr[2])<1e-9){ flat[t]=1; continue; }
+      const nn=norm(cr);
       const c=mul(add(add(v[0],v[1]),v[2]),1/3);
-      const view=norm(sub(B.eye,c)), f=dot(nn,view);
-      nrm[t]=nn; facing[t]= f>=0 ? 1 : -1;
-      if(!seen[pc.id0+t]) continue;
+      const view = projMode==='persp' ? norm(sub(B.eye,c)) : mul(B.fwd,-1), f=dot(nn,view);
+      nrm[t]=nn;
+      if(!seen[id]) continue;
       const nl = f<0 ? mul(nn,-1) : nn;
       const key=Math.max(dot(nl,KEY),0), fill=Math.max(dot(nl,FILL),0), head=Math.abs(f);
       const lit=0.34+0.46*key+0.16*fill+0.28*head;
       const col='#'+hex2(C[0]*lit*255)+hex2(C[1]*lit*255)+hex2(C[2]*lit*255);
       const p0=pts[t*3], p1=pts[t*3+1], p2=pts[t*3+2];
-      faces.push({ id: pc.id0+t, depth: dot(sub(c,B.eye),B.fwd), col, p0, p1, p2,
+      faces.push({ id, depth: dot(sub(c,B.eye),B.fwd), col, p0, p1, p2,
                    d:`M${svgPt(p0)}L${svgPt(p1)}L${svgPt(p2)}Z` });
     }
+    welded.push({ pc, n, pts, nrm, flat, vkey, vpos });
+  }
+  for(const { pc, n, pts, nrm, flat, vkey, vpos } of welded){
     /* the edges: which triangles meet along each, then which are lines */
     const edges=new Map();
-    for(let t=0;t<n;t++) for(let k=0;k<3;k++){
-      const a=vkey[t*3+k], b=vkey[t*3+(k+1)%3];
-      const ek = a<b ? a*vpos.length+b : b*vpos.length+a;
-      let e=edges.get(ek);
-      if(!e){ e={a:Math.min(a,b), b:Math.max(a,b), tris:[]}; edges.set(ek,e); }
-      e.tris.push(t);
-    }
-    let d='';
-    for(const e of edges.values()){
-      const tr=e.tris;
-      let line = tr.length!==2;                       // a border or a junction
-      if(!line) line = facing[tr[0]]!==facing[tr[1]]  // the silhouette
-                    || dot(nrm[tr[0]],nrm[tr[1]])<EDGE_CREASE;   // a crease
-      if(!line) continue;
-      if(!tr.some(t=>seen[pc.id0+t])) continue;       // wholly out of sight
-      const pa=project(...vpos[e.a]), pb=project(...vpos[e.b]);
-      /* the triangles the line may show against: the two it lies between
-       * and the ring round them.  At a silhouette on a bevel the last
-       * strip facing the camera is nearly edge-on and leaves no pixels,
-       * so the strip before it is what the buffer shows next to the line. */
-      const near=new Set();
-      for(const t of tr) for(let k=0;k<3;k++) for(const t2 of vtris[vkey[t*3+k]]) near.add(t2);
-      const mine = id => { const t=id-pc.id0; return t>=0 && t<n && near.has(t); };
-      for(const [t0,t1] of visibleRuns(ids, W, H, pa, pb, mine)){
-        const q0=[pa[0]+(pb[0]-pa[0])*t0, pa[1]+(pb[1]-pa[1])*t0];
-        const q1=[pa[0]+(pb[0]-pa[0])*t1, pa[1]+(pb[1]-pa[1])*t1];
-        d+=`M${svgPt(q0)}L${svgPt(q1)}`; nEdges++;
+    for(let t=0;t<n;t++){
+      if(flat[t]) continue;
+      for(let k=0;k<3;k++){
+        const a=vkey[t*3+k], b=vkey[t*3+(k+1)%3];
+        if(a===b) continue;
+        const ek = a<b ? a*vpos.length+b : b*vpos.length+a;
+        let e=edges.get(ek);
+        if(!e){ e={a:Math.min(a,b), b:Math.max(a,b), tris:[]}; edges.set(ek,e); }
+        e.tris.push(t);
       }
     }
-    if(d) edgePaths.push(d);
+    for(const e of edges.values()){
+      const tr=e.tris;
+      /* a contour where a triangle facing the eye meets one facing away;
+       * a crease where two bend past EDGE_CREASE; a border where the mesh
+       * simply ends.  Two triangles both facing away are the far side of
+       * a solid, and whatever their edge is, the near side is over it.
+       * Which way a triangle faces is judged from the edge, not from the
+       * triangle's own centre: under perspective the two halves of one
+       * flat quad can face opposite ways from their centres, and the
+       * diagonal between them is not a line. */
+      const mid=mul(add(vpos[e.a],vpos[e.b]),0.5);
+      const v = projMode==='persp' ? norm(sub(B.eye,mid)) : mul(B.fwd,-1);
+      const toEye = t => dot(nrm[t],v)>=0;
+      let cls=null, ownT=null;
+      if(tr.length===1){ if(toEye(tr[0])){ cls='crease'; ownT=[tr[0],tr[0]]; } }
+      else pairs: for(let i=0;i<tr.length;i++) for(let j=i+1;j<tr.length;j++){
+        const ti=tr[i], tj=tr[j], fi=toEye(ti), fj=toEye(tj);
+        if(fi!==fj) cls='contour';
+        else if(fi && dot(nrm[ti],nrm[tj])<EDGE_CREASE) cls='crease';
+        else continue;
+        ownT=[ti,tj]; break pairs;
+      }
+      if(!cls) continue;
+      const own=[pc.id0+ownT[0], pc.id0+ownT[1]];
+      /* a fold neither of whose faces reaches the eye is behind something,
+       * or edge-on; a contour is walked regardless, since the last strip of
+       * a bevel facing the eye may be too edge-on to leave a pixel */
+      if(cls==='crease' && !seen[own[0]] && !seen[own[1]]) continue;
+      const A=vpos[e.a], Bp=vpos[e.b];
+      const pa=project(A[0],A[1],A[2]), pb=project(Bp[0],Bp[1],Bp[2]);
+      if(Math.max(pa[0],pb[0])<0 || Math.min(pa[0],pb[0])>=W ||
+         Math.max(pa[1],pb[1])<0 || Math.min(pa[1],pb[1])>=H) continue;
+      const zt=[project(A[0]+nearer[0],A[1]+nearer[1],A[2]+nearer[2])[2],
+                project(Bp[0]+nearer[0],Bp[1]+nearer[1],Bp[2]+nearer[2])[2]];
+      /* a contour is looked at from just outside itself: the side away
+       * from where its triangles' third corners land on the page, taken
+       * from whichever triangle is least edge-on and so surest of it */
+      const off=[0,0];
+      if(cls==='contour'){
+        const dx=pb[0]-pa[0], dy=pb[1]-pa[1], dl=Math.hypot(dx,dy);
+        if(dl>1e-6){
+          const nx=-dy/dl, ny=dx/dl;
+          let side=0;
+          for(const t of ownT) for(let k=0;k<3;k++){
+            const vi=vkey[t*3+k];
+            if(vi===e.a||vi===e.b) continue;
+            const s=(pts[t*3+k][0]-pa[0])*nx+(pts[t*3+k][1]-pa[1])*ny;
+            if(Math.abs(s)>Math.abs(side)) side=s;
+          }
+          if(Math.abs(side)>0.05){ const o = side>0 ? -EDGE_OUT : EDGE_OUT; off[0]=nx*o; off[1]=ny*o; }
+        }
+      }
+      const list=runs[cls];
+      for(const [t0,t1] of visibleRuns(ids, W, H, pa, pb, zt, off, own, deeper)){
+        list.push({
+          a: t0===0 ? nodeBase+e.a : -(++cutEnd),
+          b: t1===1 ? nodeBase+e.b : -(++cutEnd),
+          p: [pa[0]+(pb[0]-pa[0])*t0, pa[1]+(pb[1]-pa[1])*t0],
+          q: [pa[0]+(pb[0]-pa[0])*t1, pa[1]+(pb[1]-pa[1])*t1] });
+      }
+    }
+    nodeBase+=vpos.length;
   }
   if(!faces.length) return null;
   /* --- the order: rulings from the number buffer, depth for the rest --- */
@@ -5805,25 +6002,40 @@ function trace3d(W, H){
     else { flush(); run={col:f.col, d:f.d}; }
   }
   flush();
+  /* --- the strokes: chained, straightened, specks dropped --- */
+  const inked={};
+  let nStrokes=0;
+  for(const cls of Object.keys(runs)){
+    let d='';
+    for(const s of chainStrokes(runs[cls])){
+      const pts=straighten(s, EDGE_FIT);
+      if(strokeLength(pts) < EDGE_MIN) continue;
+      d+=`<path d="M${svgPt(pts[0])}${pts.slice(1).map(p=>'L'+svgPt(p)).join('')}"/>`;
+      nStrokes++;
+    }
+    inked[cls]=d;
+  }
   const x=Math.max(0, bx0-PIC_PAD), y=Math.max(0, by0-PIC_PAD);
   const w=Math.min(W-1, bx1+PIC_PAD)-x+1, h=Math.min(H-1, by1+PIC_PAD)-y+1;
+  const layer=(label, id, attrs, inner)=>
+    `<g inkscape:groupmode="layer" inkscape:label="${label}" id="${id}" ${attrs}>${inner}</g>`;
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" `+
     `xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" `+
     `width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}">`+
     `<title>${svgEscape(baseName())} 3D</title>`+
-    `<g inkscape:groupmode="layer" inkscape:label="Faces" id="faces" `+
-    `stroke-width="0.6" stroke-linejoin="round">${body}</g>`+
-    `<g inkscape:groupmode="layer" inkscape:label="Edges" id="edges" fill="none" `+
-    `stroke="${EDGE_COLOUR}" stroke-width="${EDGE_WIDTH}" stroke-linecap="round">`+
-    edgePaths.map(d=>`<path d="${d}"/>`).join('')+`</g></svg>`;
-  return { svg, faces: faces.length, edges: nEdges, width: w, height: h };
+    layer('Faces','faces','stroke-width="0.6" stroke-linejoin="round"', body)+
+    layer('Edges','edges',`fill="none" stroke="${EDGE_COLOUR}" stroke-linecap="round" stroke-linejoin="round"`,
+      layer('Contours','contours',`stroke-width="${CONTOUR_WIDTH}"`, inked.contour)+
+      layer('Creases','creases',`stroke-width="${CREASE_WIDTH}"`, inked.crease))+
+    `</svg>`;
+  return { svg, faces: faces.length, strokes: nStrokes, width: w, height: h };
 }
 
 $('dl-3d-svg').onclick = ()=>{
   const out = withPicture(trace3d);
   if(!out) return toast('nothing to export — open a layout first');
   download(`${baseName()}-design-3d.svg`, out.svg, 'image/svg+xml');
-  toast(`3D drawing saved — ${out.faces} faces, ${out.edges} edge lines, `+
+  toast(`3D drawing saved — ${out.faces} faces, ${out.strokes} strokes, `+
         `${(out.svg.length/1024).toFixed(0)} KB`);
 };
 
