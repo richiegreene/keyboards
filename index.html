@@ -4425,13 +4425,13 @@ $('dl-png').onclick = async ()=>{
   if(!out) return toast('nothing to export — open a layout first');
   /* PRINT SIZE, NOT SCREEN SIZE.  A keyboard is a wide, thin thing whose
    * names are 10px, so at 1x the PNG is a smudge and at 2x it is only just a
-   * screenshot; 6x is a strip about a metre wide at 150dpi, which survives a
+   * screenshot; 12x is a strip about a metre wide at 300dpi, which survives a
    * slide, a poster and a zoom. The ceilings are the browser's, not a taste:
    * a canvas over ~16k on a side, or a few tens of megapixels in area, comes
    * back blank on some machines rather than failing, so a very wide rig is
    * given whatever scale does fit instead of a picture of nothing. */
   const MAX_SIDE = 12000, MAX_AREA = 60e6;
-  const scale = Math.max(1, Math.min(6, MAX_SIDE/out.width, MAX_SIDE/out.height,
+  const scale = Math.max(1, Math.min(12, MAX_SIDE/out.width, MAX_SIDE/out.height,
                                      Math.sqrt(MAX_AREA/(out.width*out.height))));
   const url = URL.createObjectURL(new Blob([out.svg], {type:'image/svg+xml'}));
   const image = new Image();
@@ -4877,22 +4877,30 @@ function lookAt(e,t,u){const z=norm(sub(e,t)),x=norm(cross(u,z)),y=cross(z,x);
  * basis instead of re-deriving it from an up-hint the way lookAt() does.
  * camBasis() fixes up the reading direction of "right" independently of
  * "up" and of the eye's position — recomputing x/y from scratch here
- * (as lookAt(eye,tgt,upHint) would) throws that fix away. */
+ * (as lookAt(eye,tgt,up) would) throws that fix away. */
 function lookAtBasis(e,right,up,fwd){
   const x=right, y=up, z=mul(fwd,-1);
   return new Float32Array([x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
     -dot(x,e),-dot(y,e),-dot(z,e),1]);}
 
 /* ---- camera ----
-   pitch is free over the whole sphere except the two poles: +PLIM looks
-   straight down, -PLIM looks straight up from underneath.  There is no ground
-   plane and no lower clamp — you can orbit right under the instrument.     */
+   A turntable with no stops.  yaw walks the eye round the instrument about
+   world Z; pitch tilts it over the top and under the bottom; and BOTH run
+   the whole circle.  Pitch is not clamped at straight down or straight up:
+   it carries on past the pole, so one drag rolls the instrument right over
+   to show its underside and its back, and rolls on until it is upright
+   again.  Read as elevation, 0 is the horizon, +90 is straight down on the
+   top, 180 is the horizon again from the far side — with the picture
+   upside down, as it is when you look over the top of a real object —
+   and -90 is straight up from underneath.  Both angles are kept in
+   (-180°, 180°].  There is no ground plane and nothing to bump into.    */
 const FOV = 0.7;
-const PLIM = Math.PI/2 - 0.0015;
-const cam={yaw:-181*Math.PI/180,pitch:82*Math.PI/180,dist:326,tx:180,ty:42,tz:4};
+const cam={yaw:-1*Math.PI/180,pitch:98*Math.PI/180,dist:326,tx:180,ty:42,tz:4};
+const wrapPi = a => a - 2*Math.PI*Math.ceil((a - Math.PI)/(2*Math.PI));
 
 function camBasis(){
   const cp=Math.cos(cam.pitch), sp=Math.sin(cam.pitch);
+  const sy=Math.sin(cam.yaw),   cy=Math.cos(cam.yaw);
   const tgt=[cam.tx,cam.ty,cam.tz];
   /* Orbiting starts from the near (player/key-front) side looking back at
    * the spine — this is the ORIGINAL, untouched eye placement.  It's the
@@ -4902,44 +4910,43 @@ function camBasis(){
    * moving the eye to the opposite side — that also swaps which side faces
    * the camera (spine ends up nearest instead of farthest). Left/right is
    * fixed below, entirely independently of where the eye sits. */
-  const eye=[cam.tx+cam.dist*Math.sin(cam.yaw)*cp,
-             cam.ty+cam.dist*Math.cos(cam.yaw)*cp,
+  const eye=[cam.tx+cam.dist*sy*cp,
+             cam.ty+cam.dist*cy*cp,
              cam.tz+cam.dist*sp];
   const fwd=norm(sub(tgt,eye));
-  /* world-up hint for the right/up basis — (0,0,1) everywhere except close
-   * to the two poles (straight down / straight up).  A true elevation or
-   * iso view (front, back, left, right, iso, under-iso) is a real view of
-   * one side of a real object, and orbiting to the far side of it SHOULD
-   * mirror "ascending X reads left to right" — that's correct, unavoidable
-   * 3D behaviour, the same as walking around a real keyboard to look at it
-   * from the far side, and this hint leaves it untouched.
-   *
-   * Near-vertical top/bottom views are different: there "azimuth" no longer
-   * points at one side of the object, it only spins the frame in place —
-   * the same overhead view rendered upside-down-and-backwards depending on
-   * which way you approached the pole from, with no physical "correct"
-   * side to prefer.  Since that spin has no physical meaning, we pin it to
-   * match the keyboard strip (spine at the top, ascending X left to right)
-   * by flipping the hint's sign with the yaw hemisphere — only inside a
-   * band close enough to the pole that "top"/"bottom" (which always use
-   * yaw 0) are the only views actually affected; every elevation/iso
-   * preset keeps its normal, correctly-mirrored back side. */
-  const NEAR_POLE = Math.PI/2 - 0.2;   // within ~11.5° of straight up/down
-  const upHint = Math.abs(cam.pitch) > NEAR_POLE
-    ? [0,0,Math.cos(cam.yaw)>=0?1:-1]
-    : [0,0,1];
-  /* "up" comes straight off the (eye, upHint) pair above — that's the
-   * vertical framing, and it is correct as-is (right-side-up, spine at the
-   * back) for the same reason the untouched eye placement is correct.
-   * "right" is what needs fixing, and it is fixed by negating it AFTER
-   * up is derived, not by feeding a flipped vector into the same cross
+  /* "up" is the way the eye moves as pitch increases — the tangent of the
+   * pitch circle at the eye — rather than something crossed out of a
+   * world-up hint.  The two agree wherever a hint is usable: (0,0,1) on
+   * the horizon, leaning over as the eye climbs.  But the tangent is also
+   * defined AT the poles, where a hint parallel to the view has nothing to
+   * cross with, and it carries straight on past them, (0,0,-1) once the
+   * eye is over the top.  That is what makes the orbit continuous: there
+   * is no pole to clamp at, and no band near one where the frame has to
+   * be spun round to a preferred reading — a top view arrived at from the
+   * back is the top view seen from the back, upside down relative to one
+   * arrived at from the front, exactly as the two are on a real turntable.
+   * The presets keep the strip's reading (spine at the top, ascending X
+   * left to right) by approaching top and bottom from the front (yaw 0). */
+  const up=[-sy*sp, -cy*sp, cp];
+  /* "right" comes from forward and up, and is then negated.  That negation
+   * is the left/right reading fix: it is applied to right alone, AFTER up
+   * is settled, not by feeding a flipped vector into the same cross
    * product that produces up — the two once shared one calculation
    * (right, then up = cross(right, fwd)), which is why a fix aimed at
    * "right" kept dragging "up" — and the eye placement — along with it. */
-  const right0=norm(cross(fwd,upHint));
-  const up=cross(right0,fwd);
-  const right=mul(right0,-1);
-  return {eye,tgt,fwd,right,up,upHint};
+  const right=mul(norm(cross(fwd,up)),-1);
+  return {eye,tgt,fwd,right,up};
+}
+/* One step of the orbit, from a drag or an arrow key: dyaw and dpitch are
+ * the pointer's travel — right and down — as angles.  Pitch simply adds:
+ * its tangent IS the frame's up, so dragging down always tips the near
+ * side down, over the top and on round.  Yaw is signed by which way up
+ * the frame is: past a pole the picture is inverted, and the turntable
+ * has to turn the other way for the instrument to keep following the
+ * pointer rather than sliding against it. */
+function orbit(dyaw, dpitch){
+  cam.yaw   = wrapPi(cam.yaw + (Math.cos(cam.pitch) < 0 ? -dyaw : dyaw));
+  cam.pitch = wrapPi(cam.pitch + dpitch);
 }
 function fit(){ if(!L) return;
   const w = canvas.clientWidth||1200, h = canvas.clientHeight||700;
@@ -4968,8 +4975,8 @@ function frameRig(aspect){
 
 const VIEWS = {
   iso:    {yaw: 0.28, pitch: 0.70},
-  top:    {yaw: 0.00, pitch: PLIM},
-  bottom: {yaw: 0.00, pitch:-PLIM},   // straight up at the underside
+  top:    {yaw: 0.00, pitch: Math.PI/2},
+  bottom: {yaw: 0.00, pitch:-Math.PI/2},   // straight up at the underside
   front:  {yaw: 0.00, pitch: 0.00},
   back:   {yaw: Math.PI, pitch: 0.00},
   left:   {yaw:-Math.PI/2, pitch: 0.00},
@@ -5213,7 +5220,7 @@ function draw(){
   $('camread').textContent =
     `az ${(cam.yaw*180/Math.PI).toFixed(0).padStart(4)}°  ` +
     `el ${(cam.pitch*180/Math.PI).toFixed(0).padStart(4)}°  ` +
-    `${cam.dist.toFixed(0)} mm` + (cam.pitch<0 ? '   · viewing from below' : '');
+    `${cam.dist.toFixed(0)} mm` + (Math.sin(cam.pitch)<0 ? '   · viewing from below' : '');
   drawGizmo();
 }
 /* Where the camera is and what it projects through, for a frame of the
@@ -5296,9 +5303,7 @@ canvas.addEventListener('pointermove',e=>{
     const shift=add(mul(B.right,-dx*s), mul(B.up, dy*s));
     cam.tx+=shift[0]; cam.ty+=shift[1]; cam.tz+=shift[2];
   } else {
-    cam.yaw+=dx*0.008;
-    // no lower clamp: -PLIM is straight up from underneath the instrument
-    cam.pitch=Math.max(-PLIM,Math.min(PLIM,cam.pitch+dy*0.008));
+    orbit(dx*0.008, dy*0.008);   // no clamp either way: see camBasis
   }
   draw();
 });
@@ -6213,12 +6218,12 @@ window.addEventListener('keydown',e=>{
   if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
   const step=e.shiftKey?0.02:0.09;
   if(e.key==='f'||e.key==='F') fit();
-  else if(e.key==='b'||e.key==='B'){ cam.pitch=-PLIM; draw(); }
-  else if(e.key==='t'||e.key==='T'){ cam.pitch= PLIM; draw(); }
-  else if(e.key==='ArrowLeft'){ cam.yaw-=step; draw(); }
-  else if(e.key==='ArrowRight'){ cam.yaw+=step; draw(); }
-  else if(e.key==='ArrowUp'){ cam.pitch=Math.min(PLIM,cam.pitch+step); draw(); }
-  else if(e.key==='ArrowDown'){ cam.pitch=Math.max(-PLIM,cam.pitch-step); draw(); }
+  else if(e.key==='b'||e.key==='B'){ cam.pitch=-Math.PI/2; draw(); }
+  else if(e.key==='t'||e.key==='T'){ cam.pitch= Math.PI/2; draw(); }
+  else if(e.key==='ArrowLeft'){ orbit(-step, 0); draw(); }
+  else if(e.key==='ArrowRight'){ orbit( step, 0); draw(); }
+  else if(e.key==='ArrowUp'){ orbit(0,  step); draw(); }
+  else if(e.key==='ArrowDown'){ orbit(0, -step); draw(); }
   else if(e.key==='Escape'){ picked=null; $('inspect').classList.remove('on'); draw(); }
   else return;
   e.preventDefault();

@@ -346,14 +346,19 @@ Where to drop:
 
 ## Viewing and inspecting the model
 
-There is **no ground plane and no lower clamp on the camera** — you can orbit
-right under the instrument and look up at the undersides, the tongues and the
-foot clearance. Faces are shaded two-sided from the view direction, so nothing
-goes black when you get beneath it, and back-face culling is off.
+There is **no ground plane and no stop on the camera in any direction** — the
+orbit runs the full circle both ways. Keep dragging past straight-down or
+straight-up and it carries on over the top or under the bottom, so one drag
+rolls the instrument over to show its underside and its back and on round until
+it is upright again; past a pole the picture is upside down, as it is when you
+look over the top of a real object. You can orbit right under the instrument
+and look up at the undersides, the tongues and the foot clearance. Faces are
+shaded two-sided from the view direction, so nothing goes black when you get
+beneath it, and back-face culling is off.
 
 | action | control |
 |---|---|
-| orbit | drag (elevation runs the full −90°…+90°) |
+| orbit | drag — azimuth and elevation both run the full 360°, straight through the poles |
 | pan | shift-drag, middle-drag or right-drag — screen-space, so it works from any angle |
 | zoom | wheel (8 mm to 20 m) |
 | inspect a part | click it |
