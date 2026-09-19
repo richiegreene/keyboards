@@ -542,7 +542,13 @@
   body.mode-play .kb-white,
   body.mode-play .kb-m{cursor:pointer}
   body.mode-play .kb-white.sounding{background:var(--accent)!important}
-  body.mode-play .kb-m.sounding{outline:0}
+  /* The accidentals light the same blue as a white: a key is a key, and a
+     black or grey one going dark while it sounds read as not sounding at
+     all. A grey key's ink is dark, which vanishes on the accent, so while
+     lit it borrows the black key's light label. */
+  body.mode-play .kb-m.sounding{outline:0;background:var(--accent)!important}
+  body.mode-play .kb-m.g.sounding .nm,
+  body.mode-play .kb-m.g.sounding .kb-tune{color:#f0f0f2}
 
   /* ---------- the strip as a text field ----------
      Custom's editor arms the keys for typing rather than for playing, so the
