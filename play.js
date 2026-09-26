@@ -107,6 +107,28 @@ ro.observe($('s-wave'));
 ro.observe($('s-adsr'));
 
 /* ---------------------------------------------------------------------
+ *  WAKING THE SOUND
+ *
+ *  A key sounds on the finger landing, and on a phone a finger landing is
+ *  not allowed to start audio — only one lifting is, or a click, or a key
+ *  (see voice.unlock). The strip also declines the browser's click so that
+ *  a held note is not taken away from it, which left a keyboard opened
+ *  cold on a phone with nothing on it able to wake the sound: it took a
+ *  detour through the drawer, whose sliders do click, before the keys
+ *  would play.
+ *
+ *  So every gesture made in Play wakes it, here, on the window and in the
+ *  capture phase — ahead of anything that might stop the event — and
+ *  synchronously, which is the only way the browser counts it as asked
+ *  for. The first touch anywhere is enough, including the first key.
+ * ------------------------------------------------------------------ */
+for (const type of ['pointerdown', 'pointerup', 'touchstart', 'touchend',
+                    'mousedown', 'click', 'keydown']) {
+  window.addEventListener(type, () => { if (inPlay()) voice.unlock(); },
+                          { capture: true, passive: true });
+}
+
+/* ---------------------------------------------------------------------
  *  Sounding a key
  * ------------------------------------------------------------------ */
 

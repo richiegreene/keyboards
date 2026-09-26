@@ -1608,6 +1608,18 @@ function setDesign(d){
   return design;
 }
 
+/* A SINGLE KEYBOARD IS A DESK OF ONE.  A preset, a link or a file that is
+ * one keyboard replaces the whole desk, not one device on it: put onto a
+ * stack still standing from the last rig, it would come up as the lower
+ * manual under that rig's upper one.  The other corners are dropped, not
+ * just hidden — they belonged to the rig that has gone, and pressing
+ * "stacked" afterwards should grow a copy of THIS keyboard, as it would on a
+ * desk that had only ever held this one. */
+function singleDesk(d){
+  rig = { side: false, stack: false, sel: 0, units: { 0: d } };
+  return setDesign(d);
+}
+
 /** Point `design` — and with it the whole Design drawer — at one device. */
 function selectUnit(slot){
   const here = rigSlots();
@@ -1937,21 +1949,16 @@ presetSel.onchange = () => {
      * preset's stack or side-by-side is still standing would leave that
      * shape in place with only one device replaced — a single-keyboard
      * preset loading as half of somebody else's rig. So choosing one always
-     * puts the desk back to a single device, the way pressing "single"
-     * itself does. */
-    rig.side = false; rig.stack = false;
-    selectUnit(rig.sel);          // re-clamps to slot 0, the only one left
+     * puts the desk back to a single device (see singleDesk). */
     play = saved.x || null;
     delete saved.x;
-    setDesign(migrate(saved));
+    singleDesk(migrate(saved));
     design.preset = presetSel.value;
   } else {
     /* a drafted sheet is written out as 32 individual keys, so it opens as
      * the whole keyboard said once; a SAVED preset keeps the scale length
      * it was saved with */
-    rig.side = false; rig.stack = false;
-    selectUnit(rig.sel);          // re-clamps to slot 0, the only one left
-    setDesign(XD.presetDesign(+presetSel.value));
+    singleDesk(XD.presetDesign(+presetSel.value));
     design.period = XM.NOTES;
   }
   /* a drafted sheet has no edge treatment of its own — and neither has a
@@ -4569,10 +4576,12 @@ $('share-input').onchange = async (e)=>{
 /**
  * A LAYOUT THAT ARRIVED, PUT ON THE DESK.
  *
- * A keyboard lands on the device the panel is editing, which is the same
- * rule a preset follows — you chose which one you were working on, and a
- * layout somebody sent you does not get to choose for you.  A rig replaces
- * the desk, because that is what it is.
+ * It arrives as what it was sent as, which is the same rule a preset
+ * follows: a rig replaces the desk with the rig, and a single keyboard
+ * replaces it with a single keyboard (see singleDesk).  What was sent is
+ * what is shown — a one-keyboard link opened in a browser still holding a
+ * stacked rig from an earlier link must not come up as that rig's lower
+ * manual.
  *
  * It goes through rebuild() like every other edit, so it is on the undo
  * stack: a layout opened by mistake is one Cmd-Z away from the keyboard
@@ -4591,7 +4600,7 @@ function takeShared(got, how, toPlay){
      * list you may not have, and it does not carry this device's numbering
      * away with it */
     delete d.preset;
-    setDesign(d);
+    singleDesk(d);
   }
   /* the blend's cache is keyed to the arrangement it was solved from, and
    * the arriving layout brings its own; syncInputs puts the slider where
@@ -4603,8 +4612,8 @@ function takeShared(got, how, toPlay){
    * layout that was here a moment ago would be settled against the wrong
    * keyboard and re-read the next time anything touched it. */
   const took = XShare.applyPlay(got.play);
-  const what = got.kind === 'rig' ? 'the whole rig' : 'this keyboard';
-  toast(`${how} — ${what} replaced` +
+  const what = got.kind === 'rig' ? 'the whole rig replaced' : 'one keyboard';
+  toast(`${how} — ${what}` +
         (took.length ? `, with its ${took.join(', ')}` : ''));
   /* A LINK IS FOR PLAYING IT, NOT DESIGNING IT. Whoever built this sent it to
    * be sounded, not edited — a link opened cold should land where that
@@ -6451,6 +6460,13 @@ buildPalette(); buildVisToggles(); syncInputs(); rebuild();
  * preset that is no longer in presets/ simply leaves the cleared desk. */
 const FIRST_PRESET = CUSTOM_PREFIX + '14 - Diatonic';
 async function boot(){
+  /* A SECOND LINK INTO THE SAME TAB.  Pasting a share link over one that is
+   * already open changes only what follows the #, which the browser treats
+   * as moving within the page rather than loading it: nothing reloads, so
+   * nothing here would ever see it.  The app's own writes to the address
+   * bar go through replaceState, which does not fire this — so it only
+   * answers somebody actually going to a link. */
+  window.addEventListener('hashchange', () => { openSharedLink(); });
   if (await openSharedLink()) return;
   if (isFreshLoad && allPresets()['14 - Diatonic']){
     presetSel.value = FIRST_PRESET;
