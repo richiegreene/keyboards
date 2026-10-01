@@ -11,9 +11,12 @@
  * it is sounding.
  *
  * Built on the main thread and posted to the worklet: the tables depend only
- * on the timbre value and the sample rate, so they are made when the slider
- * settles rather than in the audio thread, which has 128 samples to fill and
- * no business doing 11 additive syntheses inside them.
+ * on the shape and the sample rate, so they are made once rather than in the
+ * audio thread, which has 128 samples to fill and no business doing 44
+ * additive syntheses inside them. Only the four pure shapes are built. Every
+ * position between two of them is their crossfade, which the worklet does as
+ * it reads (see voice-processor.js), so the slider — and the mod wheel that
+ * slides it — can move anywhere without a table being built.
  * ------------------------------------------------------------------ */
 
 const TWO_PI = Math.PI * 2;
@@ -55,31 +58,22 @@ function buildShapeTable(shapeFn, harmonics) {
 const cache = new Map();
 
 /**
- * Band-limited tables for one morph position, one per mip level.
- * @param {number} timbre 0..300 (0 sine, 100 triangle, 200 saw, 300 square)
- * @returns {Float32Array[]} MIP_COUNT tables of TABLE_SIZE
+ * Band-limited tables for each of the four shapes, one per mip level.
+ *
+ * Each mip level is limited to the same harmonic count in every shape, so a
+ * crossfade between two shapes at the same level stays band-limited: the
+ * blend the worklet makes between neighbours cannot reintroduce aliasing.
+ * @returns {Float32Array[][]} [sine, triangle, saw, square], each MIP_COUNT
+ *   tables of TABLE_SIZE
  */
-export function wavetablesFor(timbre, sr) {
-  const key = `${timbre}|${sr}`;
-  const hit = cache.get(key);
+export function shapeTablesFor(sr) {
+  const hit = cache.get(sr);
   if (hit) return hit;
-
-  const pos = Math.min(3, Math.max(0, timbre / 100));
-  const lo = Math.min(2, Math.floor(pos));
-  const frac = pos - lo;
-
-  const mips = [];
-  for (let m = 0; m < MIP_COUNT; m++) {
-    const h = harmonicLimit(m, sr);
-    const a = buildShapeTable(SHAPES[lo], h);
-    if (frac === 0) { mips.push(a); continue; }
-    /* Blending two tables band-limited to the same harmonic count keeps the
-     * result band-limited, so the crossfade cannot reintroduce aliasing. */
-    const b = buildShapeTable(SHAPES[lo + 1], h);
-    const out = new Float32Array(TABLE_SIZE);
-    for (let i = 0; i < TABLE_SIZE; i++) out[i] = a[i] + frac * (b[i] - a[i]);
-    mips.push(out);
-  }
-  cache.set(key, mips);
-  return mips;
+  const sets = SHAPES.map((shapeFn) => {
+    const mips = [];
+    for (let m = 0; m < MIP_COUNT; m++) mips.push(buildShapeTable(shapeFn, harmonicLimit(m, sr)));
+    return mips;
+  });
+  cache.set(sr, sets);
+  return sets;
 }

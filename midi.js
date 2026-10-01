@@ -63,9 +63,18 @@ const M = {
   input: 'all',      // a port id, or every port at once
   origin: 60,        // the MIDI number that plays key 0
   velocity: true,    // let the controller say how hard, or take every note full
+  bend: 200,         // cents either way at the pitch wheel's stops
 };
 try { Object.assign(M, JSON.parse(localStorage.getItem(STORE) || '{}')); } catch (e) {}
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(M)); } catch (e) {} };
+
+/** The widest bend the panel takes: ±4800 cents, the widest any convention
+ *  asks for (MPE's). */
+const BEND_MAX = 4800;
+/** A bend range in cents, or null when it is not one the panel takes. */
+const reach = (v) =>
+  (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= BEND_MAX ? v : null);
+M.bend = reach(M.bend) ?? 200;
 
 /** The transposition, read from the one place that holds it. */
 const shift = () => (window.XTuning?.settings?.equaveShift | 0);
@@ -162,6 +171,58 @@ function allNotesOff() {
 }
 
 /* ---------------------------------------------------------------------
+ *  The wheels
+ *
+ *  The pitch wheel bends the whole instrument rather than a note, as a
+ *  synth's does: every pitch sounding moves by the same interval, whatever
+ *  is holding it — a key on the controller, a finger on the strip, the
+ *  pedal. The synth does that by multiplying every voice by one ratio (see
+ *  voice-processor.js), which is what keeps a bent chord in tune with
+ *  itself. Where the wheel is is the controller's business and is never
+ *  kept; how far it may reach is how the instrument is played, and is kept
+ *  and shared like `origin`.
+ *
+ *  The mod wheel is a hand on the Timbre slider, and slides it — see
+ *  play.js. All this side does is say where the wheel is.
+ * ------------------------------------------------------------------ */
+
+/** Where the pitch wheel is, as last reported, −1…1. */
+const wheel = { bend: 0 };
+
+/**
+ * 14 bits, centred on 8192, onto −1…1.
+ *
+ * Down reaches −1 at 0 on any controller. Up is divided by 8064 rather than
+ * 8191, because a controller that sends seven bits — many do — tops
+ * out at 127·128 = 16256: divided by 8191 its stop would fall 1.6% short of
+ * the range, and a stop set to land on a key's pitch has to land on it. A
+ * fourteen-bit wheel reaches the top a hair before its own stop instead,
+ * which nothing can hear.
+ */
+function pitchWheel(lsb, msb) {
+  const v = ((msb << 7) | lsb) - 8192;
+  wheel.bend = v < 0 ? v / 8192 : Math.min(1, v / 8064);
+  sendBend();
+}
+
+/** 0…127 onto 0…1, for play.js to slide the Timbre slider by. */
+function modWheel(val) {
+  window.XPlay?.midi?.timbre?.(val / 127);
+}
+
+function sendBend() {
+  window.XPlay?.midi?.bend?.(wheel.bend * M.bend);
+  showBend();
+}
+
+/** The pitch wheel back to centre — when nothing is left to report where it
+ *  really is, or a panic or a reset says to forget. */
+function centreBend() {
+  wheel.bend = 0;
+  sendBend();
+}
+
+/* ---------------------------------------------------------------------
  *  Reading the wire
  * ------------------------------------------------------------------ */
 
@@ -182,11 +243,20 @@ function onMessage(ev) {
   // send instead of one — the same event, and both have to let go.
   else if (cmd === 0x80 || cmd === 0x90) noteOff(ch, d[1]);
   else if (cmd === 0xB0) control(d[1], d[2]);
+  else if (cmd === 0xE0 && d.length > 2) pitchWheel(d[1], d[2]);
 }
 
 function control(cc, val) {
   if (cc === 64) window.XPlay?.midi?.pedal(val >= 64);   // sustain
+  else if (cc === 1) modWheel(val);                      // modulation wheel
   else if (cc === 120 || cc === 123) allNotesOff();      // all sound / notes off
+  else if (cc === 121) {                                 // reset all controllers
+    /* The mod wheel is left where it is: it has moved the Timbre slider, and
+     * a reset — which a DAW may send of its own accord — would otherwise
+     * throw the chosen timbre back to a sine. */
+    centreBend();
+    window.XPlay?.midi?.pedal(false);
+  }
 }
 
 /* ---------------------------------------------------------------------
@@ -260,8 +330,22 @@ async function arm(asked) {
   save();
   /* Plugged in and unplugged while the page is open: the list is rebuilt and
    * the new port bound, so a controller connected after the fact plays
-   * without a reload. */
-  access.onstatechange = () => { bindPorts(); renderPorts(); syncUI(); };
+   * without a reload.
+   *
+   * One pulled out while it was being listened to takes its notes and its
+   * bend with it. Nothing is left to send their note-offs or the wheel's
+   * return to centre, and a bend left standing would put the whole keyboard
+   * out of tune until something else moved it. Asked before the list is
+   * rebuilt, which forgets the port. */
+  access.onstatechange = (ev) => {
+    const p = ev && ev.port;
+    if (p && p.type === 'input' && p.state === 'disconnected' &&
+        (M.input === 'all' || M.input === p.id)) {
+      allNotesOff();
+      centreBend();
+    }
+    bindPorts(); renderPorts(); syncUI();
+  };
   bindPorts();
   renderPorts();
   syncUI();
@@ -301,6 +385,21 @@ function report(midi, note) {
     const hz = window.XTuning?.freqs?.[p.note];
     el.innerHTML = `<b>${p.midi}</b> &rarr; key <b>${p.note}</b>` +
       (hz > 0 ? ` &middot; ${hz.toFixed(2)} Hz` : '');
+  });
+}
+
+let bendQueued = false;
+
+/** What the pitch wheel is doing to the pitch right now, in the cents the
+ *  panel sets its range in — once per frame, since a wheel in motion sends
+ *  far more often than that. */
+function showBend() {
+  if (bendQueued) return;
+  bendQueued = true;
+  requestAnimationFrame(() => {
+    bendQueued = false;
+    const b = Math.round(wheel.bend * M.bend);
+    $('m-bend-v').textContent = b > 0 ? `+${b}¢` : b < 0 ? `−${-b}¢` : '0¢';
   });
 }
 
@@ -350,14 +449,18 @@ function syncUI() {
     : 'no keys on the keyboard yet';
 
   $('m-vel').checked = M.velocity;
+  $('m-bend').value = M.bend;
+  showBend();
 }
 
 function bind() {
   $('m-arm').onclick = () => arm(true);
 
   $('m-in').onchange = (ev) => {
-    // Notes held on the port being left would never be told to stop.
+    // Notes held on the port being left would never be told to stop, nor
+    // its pitch wheel to come back.
     allNotesOff();
+    centreBend();
     M.input = ev.target.value;
     save();
   };
@@ -376,7 +479,22 @@ function bind() {
 
   $('m-vel').onchange = (ev) => { M.velocity = ev.target.checked; save(); };
 
-  $('m-panic').onclick = () => { allNotesOff(); window.XPlay?.midi?.pedal(false); };
+  /* A range changed with the wheel held sends the wheel again, so the pitch
+   * moves under the hand rather than at the next nudge. */
+  const bendIn = $('m-bend');
+  bendIn.oninput = () => {
+    const v = reach(parseFloat(bendIn.value));
+    if (v == null) return;
+    M.bend = v;
+    save();
+    sendBend();
+  };
+
+  $('m-panic').onclick = () => {
+    allNotesOff();
+    window.XPlay?.midi?.pedal(false);
+    centreBend();
+  };
 
   /* ------------------------------------------------------------------
    *  The arrow keys are the octave
@@ -410,8 +528,13 @@ function bind() {
   window.addEventListener('xenachord:tuning', () => syncUI());
 
   /* Leaving the page with keys held: the note-offs would arrive at a window
-   * that is not listening, and come back to a chord nobody is playing. */
-  window.addEventListener('blur', allNotesOff);
+   * that is not listening, and come back to a chord nobody is playing.
+   * The pitch wheel likewise, since it springs back to centre the moment it
+   * is let go. */
+  window.addEventListener('blur', () => {
+    allNotesOff();
+    if (wheel.bend !== 0) centreBend();
+  });
 
   /* Everything dropped from the other end — leaving Play does it. What is
    * held here is only a record of what was pressed, so it is forgotten
@@ -424,7 +547,10 @@ function bind() {
  *
  * `origin` and `velocity` do: where the controller is laid on the keyboard
  * and whether it is allowed to say how hard is how the instrument is
- * played, and it belongs with the instrument.
+ * played, and it belongs with the instrument. So does `bend`, how far the
+ * pitch wheel reaches — a bend set to land on the next step of a 19-note
+ * division is part of how that keyboard was meant to be played. Where the
+ * wheel happens to be is not a setting at all, and is never kept.
  *
  * `armed` and `input` DO NOT, and must not.  `armed` is this browser's
  * record of having been let at the MIDI ports — a consent, which is not
@@ -437,14 +563,16 @@ function adopt(next) {
   const o = parseInt(next.origin, 10);
   if (Number.isFinite(o) && o >= 0 && o <= 127) M.origin = o;
   if (typeof next.velocity === 'boolean') M.velocity = next.velocity;
+  M.bend = reach(next.bend) ?? M.bend;
   save();
+  sendBend();
   syncUI();
   return true;
 }
 
 window.XMidi = {
-  /** Only the two that are about playing, never `armed` or `input`. */
-  shared: () => ({ origin: M.origin, velocity: M.velocity }),
+  /** Only what is about playing, never `armed` or `input`. */
+  shared: () => ({ origin: M.origin, velocity: M.velocity, bend: M.bend }),
   adopt,
 };
 

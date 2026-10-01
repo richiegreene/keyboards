@@ -725,9 +725,10 @@ layout travels as text, and needs nothing to be up to travel:
   sounds at, Auto or Custom, the reading conventions, the rotation, the fill
   list, every degree typed onto the strip, the transposition), `s` the synth
   (timbre and ADSR), `m` how a controller is laid on the keys (the MIDI note
-  that plays key 0, and whether velocity is taken). Each section is read back
-  by the module that owns it — `XTuning.adopt`, `XPlay.adopt`, `XMidi.adopt`
-  — which normalises it exactly as it normalises a stored session.
+  that plays key 0, whether velocity is taken, and how far the pitch wheel
+  bends). Each section is read back by the module that owns it —
+  `XTuning.adopt`, `XPlay.adopt`, `XMidi.adopt` — which normalises it exactly
+  as it normalises a stored session.
 * What is carried: everything about the keyboard, and everything about playing
   it. What is not: what a device is *called* (`noteBase` / `noteStep` belong to
   the desk it stands on, so a layout you are sent never renumbers yours), the

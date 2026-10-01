@@ -179,7 +179,8 @@
    *       every degree typed onto the strip, and the transposition.
    *   s   the synth — timbre and the ADSR envelope.
    *   m   how a controller is laid on the keys — the MIDI note that plays
-   *       key 0, and whether velocity is taken.
+   *       key 0, whether velocity is taken, and how far the pitch wheel
+   *       bends.
    *
    * WHAT IS DELIBERATELY LEFT OUT is in midi.js: whether this browser has
    * been let at the MIDI ports (a consent, which is not transferable and

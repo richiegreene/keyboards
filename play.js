@@ -29,7 +29,7 @@
  * new design handler added later to quietly become reachable from Play.
  * ------------------------------------------------------------------ */
 
-import { createTimbrePicker, FILTERED_MIN } from './synth/timbre.js';
+import { createTimbrePicker, FILTERED_MIN, familyFor, familyOf } from './synth/timbre.js';
 import { drawAdsr, attachAdsrEditor } from './synth/adsr.js';
 import * as voice from './synth/voice.js';
 
@@ -99,6 +99,35 @@ function showAdsr() {
 voice.setTimbre(S.timbre);
 voice.setAdsr(S.adsr);
 showAdsr();
+
+/* ---------------------------------------------------------------------
+ *  The mod wheel is a hand on the Timbre slider
+ *
+ *  Bottom to top is the slider left to right, across whichever family is
+ *  selected — sine, triangle, saw, square, the order the slider already
+ *  runs in. It moves the slider rather than adding a control beside it, so
+ *  where the wheel leaves the timbre is the timbre: shown, saved and shared
+ *  exactly as if the slider had been dragged there.
+ *
+ *  The sound follows every message the wheel sends. The slider, its name,
+ *  its drawn wave and the save follow once a frame, since a wheel in motion
+ *  sends far more often than a screen can show.
+ * ------------------------------------------------------------------ */
+
+let slid = false;
+
+/** @param {number} u where the wheel is, 0…1 */
+function slideTimbre(u) {
+  const f = familyFor(familyOf(S.timbre));
+  // On the slider's own steps, so the wheel stops only where a drag could.
+  const v = Math.round(f.min + Math.min(1, Math.max(0, u)) * (f.max - f.min));
+  if (v === S.timbre) return;
+  S.timbre = v;
+  voice.setTimbre(v);
+  if (slid) return;
+  slid = true;
+  requestAnimationFrame(() => { slid = false; picker.set(S.timbre); save(); });
+}
 
 /* The two canvases have no size until they are laid out, and the panel starts
  * collapsed — so they are drawn again when the panel actually opens. */
@@ -493,5 +522,14 @@ window.XPlay = {
     /** A sustain pedal on the controller, alongside Shift and not under it. */
     pedal: (down) => setPedal('midi', down),
     panic: releaseAll,
+    /** The pitch wheel, already in cents: how far every sounding pitch is
+     *  bent. Whoever is holding the note — a finger on the strip as much as
+     *  a key on the controller — since a wheel moves the instrument. Not
+     *  shut out of Design, because a wheel is wherever it was left whatever
+     *  mode is on, and in Design nothing sounds. */
+    bend: (cents) => voice.setBend(cents),
+    /** The mod wheel, 0…1, sliding the Timbre slider. Only in Play: it
+     *  changes a setting, and outside Play that setting is out of sight. */
+    timbre: (u) => { if (inPlay()) slideTimbre(u); },
   },
 };

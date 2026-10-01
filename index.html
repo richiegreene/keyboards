@@ -1253,12 +1253,33 @@
                   title="Where the controller is laid on the keyboard. The keys are read as one ascending run — one MIDI number per key, black notes included — so a controller's octave is not this instrument's. Transpose moves the keys' pitches rather than moving this.">
                 <p class="tune-read" id="m-map" style="margin-top:5px"></p>
 
+                <!-- ---- the pitch wheel ----
+                     The row says what the wheel is doing to the pitch right
+                     now, and the field under it how far the wheel reaches.
+                     It moves the whole instrument by one interval, so a
+                     chord bends as one and stays in tune with itself — see
+                     midi.js. (The mod wheel has nothing here: it slides the
+                     Timbre slider, which is its own display.) -->
+                <div class="presswrap" style="margin-top:12px">
+                  <div class="pressrow"
+                    title="What the pitch wheel is bending every sounding note by, right now.">
+                    <label>Pitch Wheel</label>
+                    <span id="m-bend-v" class="pressval">0¢</span>
+                  </div>
+                  <div class="row" style="align-items:center;margin-top:7px">
+                    <label class="tune-inline" for="m-bend"
+                      title="How far the pitch wheel bends at either stop, in cents.">Bend range &plusmn;&thinsp;cents</label>
+                    <input id="m-bend" type="number" min="0" max="4800" step="any" style="width:5em"
+                      title="How far the pitch wheel bends at either stop, in cents. 200 is the usual whole tone; set it to one step of the division — 63.16 on 19 notes to the octave — and pushing the wheel to its stop lands on the next key's pitch.">
+                  </div>
+                </div>
+
                 <div class="midi-row">
                   <label class="vis" for="m-vel"
                     title="Take how hard each key was struck from the controller. Off, every note sounds at full.">
                     <input type="checkbox" id="m-vel" checked>velocity</label>
                   <button id="m-panic"
-                    title="Let go of every note MIDI is holding, and lift the sustain pedal.">panic</button>
+                    title="Let go of every note MIDI is holding, lift the sustain pedal, and centre the pitch wheel.">panic</button>
                 </div>
               </div>
             </div>

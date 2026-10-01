@@ -2,26 +2,28 @@
  *  THE SOUNDING END
  * =====================================================================
  *
- * One AudioContext, one worklet node, and the pair of numbers the worklet
- * needs kept up to date: which shape it is folding or reading, and what the
- * envelope is. Everything expensive — the eleven band-limited tables — is
- * built here on the main thread and posted across, because the audio thread
- * has 128 samples to fill and no business doing additive synthesis inside
- * them.
+ * One AudioContext, one worklet node, and the numbers the worklet needs kept
+ * up to date: where the Timbre slider stands, what the envelope is, and where
+ * a controller's pitch wheel is. Everything expensive — the band-limited
+ * tables — is built here on the main thread and posted across, because the
+ * audio thread has 128 samples to fill and no business doing additive
+ * synthesis inside them.
  *
  * The context is not created until the first touch in Play. A browser will not
  * start one without a gesture, and a page that asks for audio before anybody
  * asked to hear anything is a page that gets muted.
  * ------------------------------------------------------------------ */
 
-import { FILTERED, FILTERED_MIN, familyOf } from './timbre.js';
-import { wavetablesFor } from './tables.js';
+import { FILTERED_MIN, familyOf } from './timbre.js';
+import { shapeTablesFor } from './tables.js';
 
 let ctx = null;
 let node = null;
 let ready = null;          // the promise the worklet module is loading on
 let timbre = FILTERED_MIN + 200;   // filtered saw
 let adsr = { a: 0.016, d: 0.067, s: 0.38, r: 0.544 };
+let bend = 0;              // cents, the pitch wheel
+let shapesSent = false;    // has the node been given the four shapes' tables?
 
 /** The one context, made the first time anything asks for it. */
 function context() {
@@ -61,42 +63,58 @@ export function start() {
 }
 
 /**
- * Everything the worklet needs to hold, as the messages that say it.
- *
- * One list, used both to configure a new node and to update a running one, so
- * a node built at any moment is in exactly the state a running one would have
- * been brought to.
+ * Everything the worklet needs to hold, as the messages that say it — the
+ * state a node is built in. A running node is kept in the same state by the
+ * setters below, each sending only what it changed.
  */
 function setup() {
   const msgs = [];
-  if (familyOf(timbre) === 'filtered') {
-    const { drive, even } = FILTERED.shape(timbre);
-    msgs.push({ t: 'shape', filtered: true, drive, even });
-  } else {
-    msgs.push({ t: 'shape', filtered: false, drive: 0, even: 0 });
-    /* Copies, not the cached originals: posting a Float32Array structured-
-     * clones it, and the cache has to survive to answer the next slider move
-     * without rebuilding eleven tables. */
-    msgs.push({ t: 'tables', mips: wavetablesFor(timbre, ctx.sampleRate).map((t) => t.slice()) });
-  }
+  if (familyOf(timbre) === 'wavetable') msgs.push(shapes());
+  msgs.push({ t: 'timbre', value: timbre });
   msgs.push({ t: 'adsr', ...adsr });
+  msgs.push({ t: 'bend', cents: bend });
   return msgs;
 }
 
-/** The same list, sent to a node that is already running. */
-function push() {
-  if (!node) return;
-  for (const m of setup()) node.port.postMessage(m);
+/**
+ * The four shapes' tables, for the wavetable family. Built once and sent
+ * once — and only when that family is wanted, so a keyboard that stays
+ * filtered never pays the ~60 ms they take to build. Posting clones them.
+ */
+function shapes() {
+  shapesSent = true;
+  return { t: 'shapes', mips: shapeTablesFor(ctx.sampleRate) };
 }
 
+/**
+ * Where the Timbre slider stands. One number however it got there — the
+ * slider, a shared layout, or the mod wheel sliding it — and the worklet
+ * glides there and blends whatever lies between two shapes itself, so no
+ * position costs a table.
+ */
 export function setTimbre(v) {
   timbre = v;
-  push();
+  if (!node) return;
+  if (!shapesSent && familyOf(v) === 'wavetable') node.port.postMessage(shapes());
+  node.port.postMessage({ t: 'timbre', value: v });
 }
 
 export function setAdsr(next) {
   adsr = { ...adsr, ...next };
   if (node) node.port.postMessage({ t: 'adsr', ...adsr });
+}
+
+/**
+ * Where a controller's pitch wheel has the whole instrument, in cents.
+ *
+ * It does not wake the audio: a wheel is not a gesture the browser will start
+ * sound for, and nothing is sounding to bend yet. A wheel turned before the
+ * first note is only remembered here, and the node is built already bent
+ * (see setup).
+ */
+export function setBend(cents) {
+  bend = cents;
+  if (node) node.port.postMessage({ t: 'bend', cents });
 }
 
 /**
