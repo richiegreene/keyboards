@@ -2018,6 +2018,13 @@
     p('#               the dome keeps its clearance the whole way up.  A');
     p('#               press prints as part of its key, in its key\'s');
     p('#               filament, so it carries the key\'s colour.');
+    p('#   CLEARANCE   a white\'s underside over the sensor is raised to');
+    p('#               z ', pn(XM.CLEAR_Z), ', the bottom of its tongue and of the spine');
+    p('#               band it plugs into, so a neighbour\'s press leaning in');
+    p('#               under its edge clears it by the key travel.  Its own');
+    p('#               press leans to z ', pn(XM.CLEAR_DRAFTED_Z),
+      ' as drafted and stands straight');
+    p('#               up from there, inside the key.');
     p('#');
     p('# MEASURED, not assumed — this design, as built:');
     p('#   every pair face lies in a real deck     ', audit.seated ? 'YES' :
@@ -2043,10 +2050,13 @@
     p('    "split":  ', pn(XM.PAIR.split), ',   # air between the halves of a split pair');
     p('}');
     p('');
-    p('# (name, key colour, foot_x, [(z, ring), (z, ring)])');
+    p('# (name, key colour, foot_x, [(z, lean, ring), (z, lean, ring)])');
     p('# One entry per key.  `ring` is that bar\'s pair face, index-matched to');
     p('# FOOT_SHAPE_F / foot_outline(), and `z` is the key deck plane it lies');
-    p('# in.  The colour is the key\'s: a pair face belongs to its key, even');
+    p('# in.  `lean` is as high as the press leans: below z on a white, whose');
+    p('# deck is raised to ', pn(XM.CLEAR_Z), ' to clear its neighbours\' presses, so');
+    p('# its press stands straight up the rest of the way inside its own key.');
+    p('# The colour is the key\'s: a pair face belongs to its key, even');
     p('# though it is drawn with the foot.');
     p('PAIRS = [');
     for (const k of bkeys) {
@@ -2055,7 +2065,7 @@
       p('    ("Pair_', String(k.index).padStart(2, '0'), '", "', k.layer, '", ',
         pn(k.foot), ', [');
       for (const fc of faces)
-        p('        (', pn(fc.z), ', [',
+        p('        (', pn(fc.z), ', ', pn(fc.lean), ', [',
           fc.ring.map(v => '(' + pn(v[0]) + ', ' + pn(v[1]) + ')').join(', '), ']),');
       p('    ]),');
     }
@@ -2943,18 +2953,24 @@ def poly_area2(ring):
     return a
 
 
-def push_prism(t, bot, top, z0, z1):
+def push_prism(t, bot, top, z0, z1, zm=None):
     """A closed prism between two equal-length rings.  Both are normalised
     to CCW together so vertex i still bridges to vertex i, and the caps are
-    wound to close the walls rather than by convention."""
+    wound to close the walls rather than by convention.  With zm below z1
+    the walls lean from bot to top only up to zm, then top runs straight
+    up to z1."""
     B, T = list(bot), list(top)
     if poly_area2(B) < 0.0:
         B.reverse(); T.reverse()
     m = len(B)
+    zl = zm if (zm is not None and zm < z1 - 1e-6) else z1
     for k in range(m):
         j = (k + 1) % m
         push_quad(t, (B[k][0], B[k][1], z0), (B[j][0], B[j][1], z0),
-                     (T[j][0], T[j][1], z1), (T[k][0], T[k][1], z1))
+                     (T[j][0], T[j][1], zl), (T[k][0], T[k][1], zl))
+        if zl < z1:
+            push_quad(t, (T[k][0], T[k][1], zl), (T[j][0], T[j][1], zl),
+                         (T[j][0], T[j][1], z1), (T[k][0], T[k][1], z1))
     V = [(p[0], p[1], 0.0) for p in B]
     for tri in triangulate_face(V, list(range(m))):
         i, j, k = tri
@@ -2966,10 +2982,11 @@ def push_prism(t, bot, top, z0, z1):
 
 def build_press(foot_x, rings):
     """one key's sensor press: two closed prisms, one per bar of the "-| |-",
-    from the drafted pad up to the key's own deck plane"""
+    from the drafted pad up to the key's own deck plane, leaning no higher
+    than lean (a white's stands straight up from there to its deck)"""
     t = []
-    for pad, (z, ring) in zip(foot_outline(foot_x), rings):
-        push_prism(t, pad, ring, FOOT_Z, z)
+    for pad, (z, lean, ring) in zip(foot_outline(foot_x), rings):
+        push_prism(t, pad, ring, FOOT_Z, z, lean)
     return t
 
 

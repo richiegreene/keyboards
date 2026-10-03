@@ -1163,6 +1163,65 @@
     return out;
   }
 
+  /* ==================================================================== *
+   *  THE CLEARANCE OVER THE SENSOR IS RAISED TO THE WHITE BAND           *
+   *                                                                      *
+   *  Over the sensor — y 21.378 to 35.378, the band the "-| |-" boss     *
+   *  occupies — the drafted white's whole underside steps up from        *
+   *  Z.whiteUnder to CLEAR_DRAFTED_Z: its walls, and the bars and stems  *
+   *  of the boss with them.  The step is a precaution.  A press leans    *
+   *  from its pad up to its own key, and the pad is often wider than the *
+   *  key above it, so the foot of a NEIGHBOUR's press can stand under    *
+   *  the edge of a white.  At the drafted height it did not clear them:  *
+   *  across the presets a neighbour's press reached up to 0.33 mm INTO   *
+   *  the white standing still, and a white goes down PAIR.travel when it *
+   *  is played.                                                          *
+   *                                                                      *
+   *  So the band comes up to CLEAR_Z, the bottom of the white's own      *
+   *  tongue and of the spine band it plugs into — Z.whiteTongue, taken   *
+   *  at its drafted 6.089277 rather than the rounded name so the two     *
+   *  come out coplanar.  No press tops out higher than an accidental's   *
+   *  deck, Z.accBottom, and CLEAR_Z is PAIR.travel above that.           *
+   *                                                                      *
+   *  EVERY VERTEX ON THAT PLANE MOVES, AND ONLY THOSE.  Nothing else of  *
+   *  the white stands between the two heights, so the band keeps its     *
+   *  plan exactly — walls, bars, stems, the dome window — and only       *
+   *  grows shallower under the shell's ceiling.  The boss is still the   *
+   *  deck the press seats on, and the arms are still found on it         *
+   *  (findArmLines picks the pair that stands highest, not a height).    *
+   *                                                                      *
+   *  THE PRESS DOES NOT LEAN ANY HIGHER.  Its own key's deck now lies at *
+   *  CLEAR_Z, but a press that leaned all the way up to it would carry   *
+   *  its sloped foot that much higher under the key beside it — the      *
+   *  very thing this clearance is for.  It leans to CLEAR_DRAFTED_Z as   *
+   *  it always did and stands straight up from there, inside its own     *
+   *  key.  See pairFaces and pushPrism.                                  *
+   * ==================================================================== */
+  const CLEAR_DRAFTED_Z = 3.660806;        // drafted: underside over the sensor
+  const CLEAR_Z = 6.089277;                // drafted: the white tongue's bottom
+
+  const CLEAR_SRC = new WeakMap();
+  /** the white with its underside over the sensor raised to CLEAR_Z */
+  function whiteClearanceRise(p) {
+    if (!(CLEAR_Z - CLEAR_DRAFTED_Z > 1e-6)) return p;
+    const hit = CLEAR_SRC.get(p);
+    if (hit) return hit;
+    const v = p.v.slice();
+    let moved = 0;
+    for (let i = 0; i < p.nv; i++) {
+      const j = i * 4 + 3;
+      if (Math.abs(v[j] - CLEAR_DRAFTED_Z) > 1e-3) continue;
+      v[j] = CLEAR_Z;
+      moved++;
+    }
+    if (!moved) throw new Error('whiteClearanceRise: no underside at ' + CLEAR_DRAFTED_Z);
+    const out = { w0: p.w0, widths: p.widths, nv: p.nv, nf: p.nf, v, f: p.f.slice(),
+                  nose: p.nose, backWall: p.backWall, derived: p.derived,
+                  back: p.back, roof: p.roof, clear: true };
+    CLEAR_SRC.set(p, out);
+    return out;
+  }
+
   const FLUSH_SRC = new WeakMap();
   /** the white with its tongue raised flush into the playing surface */
   function whiteFlushTongue(p) {
@@ -1752,8 +1811,8 @@
               (mid ? '|' + mid.side + mid.at.outer + '@' + mid.h : '');
     if (!DERIVED_WHITE[k]) {
       if (DERIVED_WHITE_N > 512) { DERIVED_WHITE = {}; DERIVED_WHITE_N = 0; }
-      const src = whiteBackWall(backReach(whiteRoofDrop(
-                    akm320Nose(KP.P[KP.INDEX['Full Sized White']['n|n']]))));
+      const src = whiteBackWall(backReach(whiteClearanceRise(whiteRoofDrop(
+                    akm320Nose(KP.P[KP.INDEX['Full Sized White']['n|n']])))));
       let base;
       if (halfR > 0) {
         const bk = stepR.outer + '|' + stepR.inner;
@@ -4581,9 +4640,14 @@
     ];
     /* X compensation clearance — the raised loop never overhangs the pad */
     const clamp = clampPairToPadX(rings, pad);
+    /* a white's press leans no higher than the drafted underside and stands
+     * straight up from there — see THE CLEARANCE OVER THE SENSOR */
+    const spec = KEY_TYPES[canonType(type)];
+    const lean = spec && spec.kind === 'white' ? Math.min(land.z, CLEAR_DRAFTED_Z)
+                                               : land.z;
     return [
-      { z: land.z, seated: land.seated, clamp, ring: rings[0] },
-      { z: land.z, seated: land.seated, clamp, ring: rings[1] }
+      { z: land.z, lean, seated: land.seated, clamp, ring: rings[0] },
+      { z: land.z, lean, seated: land.seated, clamp, ring: rings[1] }
     ];
   }
 
@@ -4605,6 +4669,12 @@
    *  Nothing is stepped and nothing is squared off.  The 1 mm stem and    *
    *  the 2 mm window survive the whole climb, because both loops are the  *
    *  drafted shape rather than a bounding box of it.                      *
+   *                                                                      *
+   *  A WHITE'S PRESS LEANS, THEN STANDS.  Its key's deck is CLEAR_Z, well *
+   *  above where the press used to meet it, and the lean stops at the     *
+   *  old height: from there the pair ring carries straight up to the      *
+   *  deck, so the extra height is all inside the key's own plan.  Still   *
+   *  one closed solid per bar — a second band of walls, no face inside.   *
    * ==================================================================== */
 
   /**
@@ -4613,15 +4683,22 @@
    * to vertex i; the caps are then wound to CLOSE the walls rather than by
    * convention, which is what makes the result watertight instead of a
    * shell with two lids facing the wrong way.
+   *
+   * `zm`, when it is below z1, is where the walls stop leaning: they run
+   * from `bot` to `top` between z0 and zm, then `top` straight up to z1.
    */
-  function pushPrism(t, bot, top, z0, z1) {
+  function pushPrism(t, bot, top, z0, z1, zm) {
     let B = bot, T = top;
     if (polyArea2(B) < 0) { B = B.slice().reverse(); T = T.slice().reverse(); }
     const m = B.length;
+    const zl = zm != null && zm < z1 - 1e-6 ? zm : z1;
     for (let k = 0; k < m; k++) {
       const j = (k + 1) % m;
       pushQuad(t, [B[k][0], B[k][1], z0], [B[j][0], B[j][1], z0],
-                  [T[j][0], T[j][1], z1], [T[k][0], T[k][1], z1]);
+                  [T[j][0], T[j][1], zl], [T[k][0], T[k][1], zl]);
+      if (zl < z1)
+        pushQuad(t, [T[k][0], T[k][1], zl], [T[j][0], T[j][1], zl],
+                    [T[j][0], T[j][1], z1], [T[k][0], T[k][1], z1]);
     }
     const V = B.map(p => [p[0], p[1], 0]);
     const idx = B.map((_, k) => k);
@@ -4636,7 +4713,8 @@
 
   /**
    * One key's sensor press: two closed prisms, one per bar of the
-   * "-| |-", from the drafted pad up to the key's own deck plane.
+   * "-| |-", from the drafted pad up to the key's own deck plane — leaning
+   * only as high as `lean`, see A WHITE'S PRESS LEANS, THEN STANDS.
    */
   function buildPress(cx, w, type, lb, rb, footX, sib) {
     const faces = pairFaces(cx, w, type, lb, rb, footX, sib);
@@ -4644,7 +4722,7 @@
     const pad = footOutline(footX);
     const t = [];
     for (let i = 0; i < faces.length; i++)
-      pushPrism(t, pad[i], faces[i].ring, FOOT.z, faces[i].z);
+      pushPrism(t, pad[i], faces[i].ring, FOOT.z, faces[i].z, faces[i].lean);
     return t;
   }
 
@@ -5277,6 +5355,7 @@
     KEY_TYPES, TYPE_ORDER, LAYOUTS,
     whiteProfile, twoSidedWhiteBase, deriveWhiteProfile, akm320Nose, whiteBackWall,
     whiteFlushTongue, onFlushTongue, WHITE_RISE, whiteRoofDrop, ROOF_DROP,
+    whiteClearanceRise, CLEAR_Z, CLEAR_DRAFTED_Z,
     NOSE_SHIFT, NOSE_LEG_RAMP, NOSE_LEG_REAR, NOSE_LEG_IN, NOSE_LEG_OUT,
     NOSE_ROOF_Z, NOSE_FLOOR_Z,
     KEY_PAIRS, PAIR_ORDER, PALETTE_ORDER, TYPE_ALIASES,
