@@ -373,7 +373,9 @@
     accRearTop: 14.12804,
     grayTongue:  [4.08924, 5.09074],   // plugs into spine layer 1
     blackTongue: [5.08924, 6.08924],   // plugs into spine layer 2
-    whiteTongue: [6.08924, 8.62804]    // plugs into spine layer 3
+    /* plugs into spine layer 3.  Drafted from 6.08924; its floor is raised
+     * to the evened black/white boundary — see THE BLACK AND WHITE BANDS */
+    whiteTongue: [6.8642, 8.62804]
   };
 
   /* ------------------------------------------------------------------ *
@@ -398,6 +400,39 @@
    *  there is no top face for them to run out to.                        *
    * ------------------------------------------------------------------ */
   const WHITE_RISE = 1.5387;   // Z.whiteTop - the drafted white band top
+
+  /* ==================================================================== *
+   *  THE BLACK AND WHITE BANDS ARE EVENED                                *
+   *                                                                      *
+   *  As drafted, the three-colour spine stacks a black band 0.86 mm      *
+   *  thick under a white one 2.39 mm thick (as built, FIT.gap apart).    *
+   *  The black is the thinnest thing a black key hangs off, and the      *
+   *  white has far more than its keys need.  So the plane between them   *
+   *  moves up to BAND_BW_Z, where the two come out the same thickness:   *
+   *                                                                      *
+   *      black band   its TOP is raised to BAND_BW_Z                     *
+   *      white band   its BOTTOM is raised to BAND_BW_Z (FIT.gap above   *
+   *                   it as built, exactly as before)                    *
+   *                                                                      *
+   *      (5.23934 + 8.63904 - FIT.gap) / 2 = 6.86419 on half A and       *
+   *      6.86421 on B, so both halves get 1.62-1.64 mm of each.          *
+   *                                                                      *
+   *  ONLY THE BAND, FOR BLACK.  The black tongue keeps its drafted       *
+   *  1 mm (Z.blackTongue): the band just stands taller behind it, and    *
+   *  the boss and lap that join the two are still clipped to the tongue. *
+   *                                                                      *
+   *  THE WHITE TONGUE FOLLOWS ITS BAND.  Every colour is drafted with    *
+   *  its tongue's floor on the plane under its band, so the white        *
+   *  tongue's floor comes up to BAND_BW_Z with it (Z.whiteTongue) and    *
+   *  the tongue goes from 2.54 mm to 1.76 mm.  Its roof stays flush      *
+   *  with the playing surface — see whiteTongueFloor.                    *
+   *                                                                      *
+   *  ONE PLANE FOR EVERY SPINE.  A two-colour spine's lower (black) and  *
+   *  upper (white) bands meet on the same plane, so a white tongue meets *
+   *  the same band whatever else the design holds.  A one-colour spine   *
+   *  has no black band and is untouched.                                 *
+   * ==================================================================== */
+  const BAND_BW_Z = Z.whiteTongue[0];    // 6.8642, black top = white bottom
 
   /* Part colours.  One table, used by the WebGL preview and written into the
    * Blender log as materials, so the two renderings read the same.        */
@@ -1177,11 +1212,11 @@
    *  the white standing still, and a white goes down PAIR.travel when it *
    *  is played.                                                          *
    *                                                                      *
-   *  So the band comes up to CLEAR_Z, the bottom of the white's own      *
-   *  tongue and of the spine band it plugs into — Z.whiteTongue, taken   *
-   *  at its drafted 6.089277 rather than the rounded name so the two     *
-   *  come out coplanar.  No press tops out higher than an accidental's   *
-   *  deck, Z.accBottom, and CLEAR_Z is PAIR.travel above that.           *
+   *  So the band comes up to CLEAR_Z, 6.089277: the drafted bottom of    *
+   *  the white's tongue and of the spine band it plugs into.  Both have  *
+   *  since been raised (THE BLACK AND WHITE BANDS ARE EVENED); the       *
+   *  clearance stays where it was set.  No press tops out higher than an *
+   *  accidental's deck, Z.accBottom, and CLEAR_Z is PAIR.travel above.   *
    *                                                                      *
    *  EVERY VERTEX ON THAT PLANE MOVES, AND ONLY THOSE.  Nothing else of  *
    *  the white stands between the two heights, so the band keeps its     *
@@ -1198,7 +1233,7 @@
    *  key.  See pairFaces and pushPrism.                                  *
    * ==================================================================== */
   const CLEAR_DRAFTED_Z = 3.660806;        // drafted: underside over the sensor
-  const CLEAR_Z = 6.089277;                // drafted: the white tongue's bottom
+  const CLEAR_Z = 6.089277;                // the white tongue's DRAFTED bottom
 
   const CLEAR_SRC = new WeakMap();
   /** the white with its underside over the sensor raised to CLEAR_Z */
@@ -1273,6 +1308,33 @@
                   nose: p.nose, backWall: p.backWall, derived: p.derived,
                   back: p.back, flushTongue: true };
     FLUSH_SRC.set(p, out);
+    return out;
+  }
+
+  const FLOOR_SRC = new WeakMap();
+  /**
+   * The white with its tongue's floor raised to Z.whiteTongue[0] — see
+   * THE BLACK AND WHITE BANDS ARE EVENED.  The tongue is everything at or
+   * behind the key's back face (y <= BACK_Y) and its floor is the lowest
+   * thing at its y = 0 end; every vertex on that floor moves, the ones on
+   * the back face included, so the back face below the tongue simply
+   * reaches higher and nothing else of the key changes.
+   */
+  function whiteTongueFloor(p) {
+    const hit = FLOOR_SRC.get(p);
+    if (hit) return hit;
+    let floor = Infinity;
+    for (let i = 0; i < p.nv; i++)
+      if (p.v[i * 4 + 2] < 1e-3 && p.v[i * 4 + 3] < floor) floor = p.v[i * 4 + 3];
+    if (!(Z.whiteTongue[0] - floor > 1e-6)) return p;
+    const v = p.v.slice();
+    for (let i = 0; i < p.nv; i++) {
+      const j = i * 4;
+      if (v[j + 2] > BACK_Y + 1e-3 || Math.abs(v[j + 3] - floor) > 1e-4) continue;
+      v[j + 3] = Z.whiteTongue[0];
+    }
+    const out = Object.assign({}, p, { v, f: p.f.slice(), tongueFloor: true });
+    FLOOR_SRC.set(p, out);
     return out;
   }
 
@@ -2737,7 +2799,8 @@
     /* a white is never picked from the sheet any more — it is derived from
      * what actually stands beside it.  See whiteProfile above.          */
     if (t === 'Full Sized White')
-      return { p: bev(whiteFlushTongue(whiteProfile(lb, rb))), mirror, exact: true };
+      return { p: bev(whiteFlushTongue(whiteTongueFloor(whiteProfile(lb, rb)))),
+               mirror, exact: true };
     if (table[want] != null) return { p: bev(backReach(KP.P[table[want]])), mirror, exact: true };
     /* The sheets draw nine of the sixteen possible neighbour contexts.  For
      * one they never drew, borrow the drafted white whose context is
@@ -3718,6 +3781,11 @@
     const src = SPINE.layers[kind][hn];
     const out = [];
     let prevTop = -Infinity;
+    /* THE BLACK AND WHITE BANDS ARE EVENED: the black band's top and the
+     * white band's bottom both go to BAND_BW_Z, and FIT.gap below still
+     * holds the white off the black.  Only where there IS a black band —
+     * a one-colour spine's white runs from the bottom as it always did. */
+    const hasBlack = src.some(M => spineLayerPart(kind, M.name) === 'black');
     for (const L of src) {
       /* THE WHITE BAND IS TALLER THAN IT WAS DRAFTED.  Its top face — and
        * only its top face — is lifted WHITE_RISE, which puts it level with
@@ -3725,11 +3793,13 @@
        * full section up to it.  See THE WHITE'S TOP RUNS STRAIGHT INTO ITS
        * TONGUE.  The rise goes onto the DRAFTED top as well, because that
        * is what the boss and the lap are clipped to. */
-      const rise = spineLayerPart(kind, L.name) === 'white' ? WHITE_RISE : 0;
-      const top = L.z1 + rise;
-      const z0 = Math.max(L.z0, prevTop + FIT.gap);
+      const part = spineLayerPart(kind, L.name);
+      const rise = part === 'white' ? WHITE_RISE : 0;
+      const top = part === 'black' ? BAND_BW_Z : L.z1 + rise;
+      const bot = part === 'white' && hasBlack ? BAND_BW_Z : L.z0;
+      const z0 = Math.max(bot, prevTop + FIT.gap);
       const z1 = Math.max(top, z0 + 0.2);
-      out.push({ name: L.name, z0, z1, z0Drafted: L.z0, z1Drafted: top });
+      out.push({ name: L.name, z0, z1, z0Drafted: bot, z1Drafted: top });
       prevTop = z1;
     }
     return out;
@@ -5355,7 +5425,7 @@
     KEY_TYPES, TYPE_ORDER, LAYOUTS,
     whiteProfile, twoSidedWhiteBase, deriveWhiteProfile, akm320Nose, whiteBackWall,
     whiteFlushTongue, onFlushTongue, WHITE_RISE, whiteRoofDrop, ROOF_DROP,
-    whiteClearanceRise, CLEAR_Z, CLEAR_DRAFTED_Z,
+    whiteClearanceRise, CLEAR_Z, CLEAR_DRAFTED_Z, whiteTongueFloor, BAND_BW_Z,
     NOSE_SHIFT, NOSE_LEG_RAMP, NOSE_LEG_REAR, NOSE_LEG_IN, NOSE_LEG_OUT,
     NOSE_ROOF_Z, NOSE_FLOOR_Z,
     KEY_PAIRS, PAIR_ORDER, PALETTE_ORDER, TYPE_ALIASES,

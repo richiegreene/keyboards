@@ -2019,8 +2019,8 @@
     p('#               press prints as part of its key, in its key\'s');
     p('#               filament, so it carries the key\'s colour.');
     p('#   CLEARANCE   a white\'s underside over the sensor is raised to');
-    p('#               z ', pn(XM.CLEAR_Z), ', the bottom of its tongue and of the spine');
-    p('#               band it plugs into, so a neighbour\'s press leaning in');
+    p('#               z ', pn(XM.CLEAR_Z), ', where its tongue and spine band were');
+    p('#               drafted to start, so a neighbour\'s press leaning in');
     p('#               under its edge clears it by the key travel.  Its own');
     p('#               press leans to z ', pn(XM.CLEAR_DRAFTED_Z),
       ' as drafted and stands straight');
